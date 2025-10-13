@@ -1,0 +1,127 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Updated to sea blue theme colors */
+  --background: #f0f9ff; /* Light Blue */
+  --foreground: #1d3557; /* Dark Blue */
+  --card: #ffffff; /* White */
+  --card-foreground: #1d3557; /* Dark Blue */
+  --popover: #ffffff; /* White */
+  --popover-foreground: #1d3557; /* Dark Blue */
+  --primary: #0077b6; /* Sea Blue */
+  --primary-foreground: #ffffff; /* White */
+  --secondary: #90e0ef; /* Sky Blue */
+  --secondary-foreground: #1d3557; /* Dark Blue */
+  --muted: #e0fbfc; /* Very Light Blue */
+  --muted-foreground: #1d3557; /* Dark Blue */
+  --accent: #90e0ef; /* Sky Blue */
+  --accent-foreground: #1d3557; /* Dark Blue */
+  --destructive: #ff6b6b; /* Red */
+  --destructive-foreground: #ffffff; /* White */
+  --border: #90e0ef; /* Sky Blue */
+  --input: #ffffff; /* White */
+  --ring: rgba(0, 119, 182, 0.5); /* Semi-transparent Sea Blue */
+  --chart-1: #0077b6; /* Sea Blue */
+  --chart-2: #90e0ef; /* Sky Blue */
+  --chart-3: #1d3557; /* Dark Blue */
+  --chart-4: #f0f9ff; /* Light Blue */
+  --chart-5: #ffffff; /* White */
+  --radius: 0.5rem;
+  --sidebar: #f0f9ff; /* Light Blue */
+  --sidebar-foreground: #1d3557; /* Dark Blue */
+  --sidebar-primary: #0077b6; /* Sea Blue */
+  --sidebar-primary-foreground: #ffffff; /* White */
+  --sidebar-accent: #90e0ef; /* Sky Blue */
+  --sidebar-accent-foreground: #1d3557; /* Dark Blue */
+  --sidebar-border: #90e0ef; /* Sky Blue */
+  --sidebar-ring: rgba(0, 119, 182, 0.5); /* Semi-transparent Sea Blue */
+}
+
+.dark {
+  /* Updated dark mode colors to maintain sea blue theme */
+  --background: #0a1628; /* Very Dark Blue */
+  --foreground: #f0f9ff; /* Light Blue */
+  --card: #1d3557; /* Dark Blue */
+  --card-foreground: #f0f9ff; /* Light Blue */
+  --popover: #1d3557; /* Dark Blue */
+  --popover-foreground: #f0f9ff; /* Light Blue */
+  --primary: #90e0ef; /* Sky Blue */
+  --primary-foreground: #1d3557; /* Dark Blue */
+  --secondary: #0077b6; /* Sea Blue */
+  --secondary-foreground: #f0f9ff; /* Light Blue */
+  --muted: #1d3557; /* Dark Blue */
+  --muted-foreground: #90e0ef; /* Sky Blue */
+  --accent: #0077b6; /* Sea Blue */
+  --accent-foreground: #f0f9ff; /* Light Blue */
+  --destructive: #ff6b6b; /* Red */
+  --destructive-foreground: #ffffff; /* White */
+  --border: #0077b6; /* Sea Blue */
+  --input: #1d3557; /* Dark Blue */
+  --ring: rgba(144, 224, 239, 0.5); /* Semi-transparent Sky Blue */
+  --chart-1: #90e0ef; /* Sky Blue */
+  --chart-2: #0077b6; /* Sea Blue */
+  --chart-3: #f0f9ff; /* Light Blue */
+  --chart-4: #1d3557; /* Dark Blue */
+  --chart-5: #0a1628; /* Very Dark Blue */
+  --sidebar: #0a1628; /* Very Dark Blue */
+  --sidebar-foreground: #f0f9ff; /* Light Blue */
+  --sidebar-primary: #90e0ef; /* Sky Blue */
+  --sidebar-primary-foreground: #1d3557; /* Dark Blue */
+  --sidebar-accent: #0077b6; /* Sea Blue */
+  --sidebar-accent-foreground: #f0f9ff; /* Light Blue */
+  --sidebar-border: #0077b6; /* Sea Blue */
+  --sidebar-ring: rgba(144, 224, 239, 0.5); /* Semi-transparent Sky Blue */
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
