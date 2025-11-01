@@ -1,12 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
+import axios from "axios"
+import Cookies from "js-cookie"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Search, Filter, MapPin, Calendar, Users, MoreVertical } from "lucide-react"
+import { Plus, Search, Filter, MapPin, Calendar, MoreVertical } from "lucide-react"
 import { CreateTripModal } from "@/components/trips/create-trip-modal"
 import { EditTripModal } from "@/components/trips/edit-trip-modal"
 import { DeleteTripModal } from "@/components/trips/delete-trip-modal"
@@ -14,48 +16,70 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { motion } from "framer-motion"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
-// Mock data for trips
-const mockTrips = [
-  {
-    id: "1",
-    tenChuyenDi: "Du lịch Đà Nẵng",
-    ngayBatDau: "2024-03-15",
-    ngayKetThuc: "2024-03-20",
-    soThanhVien: 4,
-    tienDo: 75,
-    trangThai: "planning",
-    moTa: "Khám phá thành phố biển xinh đẹp",
-  },
-  {
-    id: "2",
-    tenChuyenDi: "Phượt Sapa",
-    ngayBatDau: "2024-04-01",
-    ngayKetThuc: "2024-04-05",
-    soThanhVien: 6,
-    tienDo: 30,
-    trangThai: "draft",
-    moTa: "Chinh phục đỉnh Fansipan",
-  },
-  {
-    id: "3",
-    tenChuyenDi: "Hội An - Huế",
-    ngayBatDau: "2024-02-10",
-    ngayKetThuc: "2024-02-15",
-    soThanhVien: 2,
-    tienDo: 100,
-    trangThai: "completed",
-    moTa: "Khám phá di sản văn hóa",
-  },
-]
+// Dữ liệu sẽ được tải từ API
 
 export default function DashboardPage() {
   const router = useRouter()
-  const [trips, setTrips] = useState(mockTrips)
+  const [trips, setTrips] = useState<any[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingTrip, setEditingTrip] = useState<any>(null)
   const [deletingTrip, setDeletingTrip] = useState<any>(null)
+
+  // Helper: xác định trạng thái theo ngày kết thúc
+  const deriveStatus = (ngayBatDau: string | undefined, ngayKetThuc: string | undefined, fallback: string) => {
+    if (ngayKetThuc) {
+      const today = new Date()
+      const end = new Date(ngayKetThuc)
+      // So sánh theo ngày (bỏ giờ)
+      today.setHours(0, 0, 0, 0)
+      end.setHours(0, 0, 0, 0)
+      if (today.getTime() > end.getTime()) return "completed"
+      if (today.getTime() === end.getTime()) return "upcoming"
+    }
+    return fallback || "planning"
+  }
+
+  const fetchTrips = useCallback(async () => {
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        return router.replace("/login")
+      }
+
+      const res = await axios.get("https://travel-planner-imdw.onrender.com/api/chuyendi", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+        params: { _t: Date.now() },
+      })
+
+      const data = res?.data
+      const mapped = (data?.danh_sach || []).map((item: any) => ({
+        id: item?.chuyen_di_id?.toString() || "",
+        tenChuyenDi: item?.ten_chuyen_di || "",
+        moTa: item?.mo_ta || "",
+        ngayBatDau: item?.ngay_bat_dau || "",
+        ngayKetThuc: item?.ngay_ket_thuc || "",
+        trangThai: deriveStatus(item?.ngay_bat_dau, item?.ngay_ket_thuc, "planning"),
+        congKhai: typeof item?.cong_khai === 'number' ? item.cong_khai : Number(item?.cong_khai ?? 0),
+        _api: item,
+      }))
+      setTrips(mapped)
+    } catch (error: any) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        return router.replace("/login")
+      }
+      console.error("Lỗi khi tải danh sách chuyến đi:", error)
+    }
+  }, [router])
+
+  useEffect(() => {
+    fetchTrips()
+  }, [fetchTrips])
 
   const filteredTrips = trips.filter((trip) => {
     const matchesSearch = trip.tenChuyenDi.toLowerCase().includes(searchTerm.toLowerCase())
@@ -65,83 +89,150 @@ export default function DashboardPage() {
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
-      draft: { label: "Nháp", variant: "secondary" as const },
-      planning: { label: "Đang lập kế hoạch", variant: "secondary" as const },
+      planning: { label: "Đang thực hiện", variant: "secondary" as const },
+      upcoming: { label: "Sắp tới", variant: "secondary" as const },
       completed: { label: "Hoàn thành", variant: "outline" as const },
     }
-    return statusConfig[status as keyof typeof statusConfig] || statusConfig.draft
+    return statusConfig[status as keyof typeof statusConfig] || statusConfig.planning
   }
 
-  const getProgressColor = (progress: number) => {
-    if (progress >= 80) return "bg-green-500"
-    if (progress >= 50) return "bg-primary"
-    return "bg-yellow-500"
-  }
-
-  // const handleCreateTrip = (tripData: any) => {
-  //   const newTrip = {
-  //     id: Date.now().toString(),
-  //     ...tripData,
-  //     soThanhVien: 1,
-  //     tienDo: 0,
-  //     trangThai: "draft",
-  //   }
-  //   setTrips([newTrip, ...trips])
-  //   setShowCreateModal(false)
-  // }
-  const handleCreateTrip = async (tripData: any) => {
-  try {
-    const token = localStorage.getItem("token")
-
-    if (!token) {
-      alert("Vui lòng đăng nhập để tạo chuyến đi!")
-      return
+  const handleCreateTrip = (created: any) => {
+    try {
+      if (created) {
+        // Map từ schema API đã chuẩn hóa → schema UI của dashboard
+        const mapped = {
+          // Các trường UI đang dùng (camelCase) để tránh lỗi truy cập thuộc tính
+          id: created?.chuyen_di_id || created?.id || Date.now().toString(),
+          tenChuyenDi: created?.ten_chuyen_di || created?.tenChuyenDi || "",
+          moTa: created?.mo_ta || created?.moTa || "",
+          ngayBatDau: created?.ngay_bat_dau || created?.ngayBatDau || "",
+          ngayKetThuc: created?.ngay_ket_thuc || created?.ngayKetThuc || "",
+          trangThai: deriveStatus(created?.ngay_bat_dau || created?.ngayBatDau, created?.ngay_ket_thuc || created?.ngayKetThuc, created?.trang_thai || created?.trangThai || "planning"),
+          congKhai: typeof created?.cong_khai === 'number' ? created.cong_khai : Number(created?.cong_khai ?? 0),
+          _api: {
+            chuyen_di_id: created?.chuyen_di_id || created?.id || null,
+            ten_chuyen_di: created?.ten_chuyen_di || created?.tenChuyenDi || "",
+            mo_ta: created?.mo_ta || created?.moTa || "",
+            dia_diem_xuat_phat: created?.dia_diem_xuat_phat || created?.diaDiemXuatPhat || "",
+            ngay_bat_dau: created?.ngay_bat_dau || created?.ngayBatDau || "",
+            ngay_ket_thuc: created?.ngay_ket_thuc || created?.ngayKetThuc || "",
+            chu_so_huu_id: created?.chu_so_huu_id || created?.chuSoHuuId || "",
+            tien_te: created?.tien_te || created?.tienTe || "VND",
+            trang_thai: deriveStatus(created?.ngay_bat_dau || created?.ngayBatDau, created?.ngay_ket_thuc || created?.ngayKetThuc, created?.trang_thai || created?.trangThai || "planning"),
+            tao_luc: created?.tao_luc || created?.taoLuc || new Date().toISOString(),
+            cong_khai: typeof created?.cong_khai === 'number' ? created.cong_khai : Number(created?.cong_khai ?? 0),
+          },
+        }
+        // Cập nhật nhanh UI rồi gọi reload từ server để đồng bộ
+        setTrips([mapped as any, ...trips])
+        fetchTrips()
+      }
+    } finally {
+      setShowCreateModal(false)
     }
+  }
 
-    const response = await fetch("https://travel-planner-imdw.onrender.com/api/chuyendi", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        ten_chuyen_di: tripData.tenChuyenDi,
-        mo_ta: tripData.moTa,
-        dia_diem_xuat_phat: tripData.diaDiemXuatPhat,
-        ngay_bat_dau: tripData.ngayBatDau,
-        ngay_ket_thuc: tripData.ngayKetThuc,
-        tien_te: tripData.tienTe,
-        trang_thai: tripData.trangThai || "draft",
-      }),
-    })
 
-    // 🔍 Ghi log để xem API trả gì
-    console.log("Response status:", response.status)
-    const text = await response.text()
-    console.log("Response text:", text)
+  const handleEditTrip = async (tripData: any) => {
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        return router.replace("/login")
+      }
 
-    if (!response.ok) {
-      throw new Error(`API Error ${response.status}: ${text}`)
+      const current = editingTrip
+      const tripId = current?._api?.chuyen_di_id || current?.id
+      if (!tripId) {
+        throw new Error("Không xác định được ID chuyến đi để cập nhật")
+      }
+
+      // Chấp nhận cả camelCase và snake_case từ modal
+      const tenChuyenDi = tripData?.tenChuyenDi ?? tripData?.ten_chuyen_di ?? current?.tenChuyenDi ?? ""
+      const moTa = tripData?.moTa ?? tripData?.mo_ta ?? current?.moTa ?? ""
+      const ngayBatDau = tripData?.ngayBatDau ?? tripData?.ngay_bat_dau ?? current?.ngayBatDau ?? ""
+      const ngayKetThuc = tripData?.ngayKetThuc ?? tripData?.ngay_ket_thuc ?? current?.ngayKetThuc ?? ""
+      const diaDiemXuatPhat = tripData?.diaDiemXuatPhat ?? tripData?.dia_diem_xuat_phat ?? current?._api?.dia_diem_xuat_phat ?? ""
+      const congKhaiVal = ((): number => {
+        if (typeof tripData?.congKhai === 'number') return tripData.congKhai
+        if (typeof tripData?.cong_khai !== 'undefined') return Number(tripData.cong_khai)
+        if (typeof current?.congKhai === 'number') return current.congKhai
+        if (typeof current?._api?.cong_khai !== 'undefined') return Number(current._api.cong_khai)
+        return 0
+      })()
+
+      const payload = {
+        chuyen_di_id: tripId,
+        ten_chuyen_di: tenChuyenDi,
+        mo_ta: moTa,
+        dia_diem_xuat_phat: diaDiemXuatPhat,
+        ngay_bat_dau: ngayBatDau,
+        ngay_ket_thuc: ngayKetThuc,
+        chu_so_huu_id: current?._api?.chu_so_huu_id ?? "",
+        tien_te: current?._api?.tien_te ?? "VND",
+        trang_thai: current?._api?.trang_thai ?? current?.trangThai ?? "planning",
+        tao_luc: current?._api?.tao_luc ?? new Date().toISOString(),
+        cong_khai: congKhaiVal,
+      }
+
+      await axios.put(`https://travel-planner-imdw.onrender.com/api/chuyendi/${tripId}`,
+        payload,
+        { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, params: { _t: Date.now() } }
+      )
+
+      // Cập nhật UI lạc quan
+      const updatedUi = {
+        ...current,
+        tenChuyenDi: tenChuyenDi,
+        moTa: moTa,
+        ngayBatDau: ngayBatDau,
+        ngayKetThuc: ngayKetThuc,
+        trangThai: deriveStatus(payload.ngay_bat_dau, payload.ngay_ket_thuc, payload.trang_thai),
+        congKhai: congKhaiVal,
+        _api: { ...(current?._api || {}), ...payload },
+      }
+
+      setTrips(trips.map((t) => (t.id === current.id ? updatedUi : t)))
+      setEditingTrip(null)
+      fetchTrips()
+    } catch (error: any) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        return router.replace("/login")
+      }
+      console.error("Lỗi khi cập nhật chuyến đi:", error)
+      setEditingTrip(null)
     }
-
-    const newTrip = JSON.parse(text)
-    setTrips([newTrip, ...trips])
-    setShowCreateModal(false)
-  } catch (error) {
-    console.error("Lỗi khi tạo chuyến đi:", error)
-    alert("Tạo chuyến đi thất bại!")
-  }
-}
-
-
-  const handleEditTrip = (tripData: any) => {
-    setTrips(trips.map((trip) => (trip.id === editingTrip.id ? { ...trip, ...tripData } : trip)))
-    setEditingTrip(null)
   }
 
-  const handleDeleteTrip = () => {
-    setTrips(trips.filter((trip) => trip.id !== deletingTrip.id))
-    setDeletingTrip(null)
+  const handleDeleteTrip = async () => {
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        return router.replace("/login")
+      }
+
+      const tripId = deletingTrip?.id || deletingTrip?._api?.chuyen_di_id
+      if (!tripId) {
+        console.error("Không xác định được ID chuyến đi để xóa")
+      } else {
+        await axios.delete(`https://travel-planner-imdw.onrender.com/api/chuyendi/${tripId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          params: { _t: Date.now() },
+        })
+      }
+
+      // Cập nhật UI lạc quan và refetch để đồng bộ
+      setTrips(trips.filter((trip) => trip.id !== tripId?.toString()))
+      setDeletingTrip(null)
+      fetchTrips()
+    } catch (error: any) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        return router.replace("/login")
+      }
+      console.error("Lỗi khi xóa chuyến đi:", error)
+      setDeletingTrip(null)
+    }
   }
 
   const handleViewTrip = (tripId: string) => {
@@ -156,12 +247,13 @@ export default function DashboardPage() {
         {/* Page Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-foreground font-[family-name:var(--font-space-grotesk)]">
-              Chuyến Đi Của Tôi
-            </h1>
-            <p className="text-muted-foreground mt-2 font-[family-name:var(--font-dm-sans)]">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground font-[family-name:var(--font-space-grotesk)]">
+  Chuyến Đi Của Tôi
+</h1>
+
+            {/* <p className="text-muted-foreground mt-2 font-[family-name:var(--font-dm-sans)]">
               Quản lý và theo dõi tất cả các chuyến đi của bạn
-            </p>
+            </p> */}
           </div>
           <Button onClick={() => setShowCreateModal(true)} className="bg-primary hover:bg-primary/90">
             <Plus className="h-4 w-4 mr-2" />
@@ -174,10 +266,10 @@ export default function DashboardPage() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Tìm kiếm chuyến đi..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+             placeholder="Tìm kiếm chuyến đi..."
+             value={searchTerm}
+             onChange={(e) => setSearchTerm(e.target.value)}
+             className="pl-10 bg-white/80 border border-gray-300 focus:border-blue-300 focus:ring-1 focus:ring-blue-200 shadow-sm rounded-md transition"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -187,10 +279,7 @@ export default function DashboardPage() {
               onChange={(e) => setFilterStatus(e.target.value)}
               className="px-3 py-2 border border-border rounded-md bg-background text-foreground"
             >
-              <option value="all">Tất cả</option>
-              <option value="draft">Nháp</option>
-              <option value="planning">Đang lập kế hoạch</option>
-              <option value="completed">Hoàn thành</option>
+              <option value="planning">Đang thực hiện</option>
             </select>
           </div>
         </div>
@@ -216,49 +305,68 @@ export default function DashboardPage() {
                       </CardDescription>
                     </div>
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => setEditingTrip(trip)}>Chỉnh sửa</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setDeletingTrip(trip)} className="text-destructive">
-                          Xóa
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <Button
+      variant="ghost"
+      size="icon"
+      className="opacity-80 hover:opacity-100 transition-opacity hover:bg-accent rounded-full"
+    >
+      <MoreVertical className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
+    </Button>
+  </DropdownMenuTrigger>
+
+  <DropdownMenuContent align="end" className="w-40">
+    <DropdownMenuItem
+      onClick={() => setEditingTrip(trip)}
+      className="flex items-center gap-2 hover:bg-accent"
+    >
+      ✏️ <span>Chỉnh sửa</span>
+    </DropdownMenuItem>
+
+    <DropdownMenuItem
+      onClick={() => setDeletingTrip(trip)}
+      className="text-destructive flex items-center gap-2 hover:bg-destructive/10"
+    >
+      🗑️ <span>Xóa</span>
+    </DropdownMenuItem>
+  </DropdownMenuContent>
+</DropdownMenu>
+
                   </div>
-                  <Badge {...getStatusBadge(trip.trangThai)} className="w-fit mt-2">
-                    {getStatusBadge(trip.trangThai).label}
-                  </Badge>
+                  <div className="flex items-center gap-2 mt-2">
+  {/* 🟩 Trạng thái chuyến đi */}
+  <Badge
+    {...getStatusBadge(trip.trangThai)}
+    className="w-fit px-3 py-1 text-sm rounded-full shadow-sm"
+  >
+    {getStatusBadge(trip.trangThai).label}
+  </Badge>
+
+  {/* 🟦 Công khai / Riêng tư */}
+  {typeof trip.congKhai !== "undefined" && (
+    <Badge
+      variant="outline"
+      className={`w-fit px-3 py-1 text-sm rounded-full shadow-sm ${
+        trip.congKhai === 1
+          ? "bg-blue-50 text-blue-600 border-blue-400"
+          : "bg-gray-50 text-gray-600 border-gray-300"
+      }`}
+    >
+      {trip.congKhai === 1 ? "Công khai" : "Riêng tư"}
+    </Badge>
+  )}
+</div>
+
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     <div className="flex items-center gap-1">
                       <Calendar className="h-4 w-4" />
-                      <span>{new Date(trip.ngayBatDau).toLocaleDateString("vi-VN")}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Users className="h-4 w-4" />
-                      <span>{trip.soThanhVien} người</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Tiến độ</span>
-                      <span className="font-medium">{trip.tienDo}%</span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(trip.tienDo)}`}
-                        style={{ width: `${trip.tienDo}%` }}
-                      />
+                      <span>
+                        {trip.ngayBatDau ? new Date(trip.ngayBatDau).toLocaleDateString("vi-VN") : "—"}
+                        {" "}-{" "}
+                        {trip.ngayKetThuc ? new Date(trip.ngayKetThuc).toLocaleDateString("vi-VN") : "—"}
+                      </span>
                     </div>
                   </div>
 

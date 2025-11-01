@@ -1,17 +1,12 @@
 "use client"
-
-import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plane, MapPin, Users, Calculator, MessageCircle, Globe, Eye } from "lucide-react"
-import { LoginForm } from "@/components/auth/login-form"
-import { RegisterForm } from "@/components/auth/register-form"
+// Removed inline modals; use dedicated pages instead
 import { motion } from "framer-motion"
 import Link from "next/link"
 
 export default function HomePage() {
-  const [showLogin, setShowLogin] = useState(false)
-  const [showRegister, setShowRegister] = useState(false)
 
   const features = [
     {
@@ -54,12 +49,12 @@ export default function HomePage() {
                 <span className="hidden sm:inline">Khám phá</span>
               </Button>
             </Link>
-            <Button variant="ghost" onClick={() => setShowLogin(true)} className="hover:bg-primary/10">
-              Đăng Nhập
-            </Button>
-            <Button onClick={() => setShowRegister(true)} className="bg-primary hover:bg-primary/90">
-              Đăng Ký
-            </Button>
+            <Link href="/login">
+              <Button variant="ghost" className="hover:bg-primary/10">Đăng Nhập</Button>
+            </Link>
+            <Link href="/register">
+              <Button className="bg-primary hover:bg-primary/90">Đăng Ký</Button>
+            </Link>
           </div>
         </div>
       </header>
@@ -76,13 +71,14 @@ export default function HomePage() {
               Quản lý hành trình, chia sẻ chi phí, và cộng tác với bạn bè trong một ứng dụng duy nhất
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <Button
-                size="lg"
-                onClick={() => setShowRegister(true)}
-                className="bg-primary hover:bg-primary/90 text-lg px-8 py-3"
-              >
+              <Link href="/register">
+                <Button
+                  size="lg"
+                  className="bg-primary hover:bg-primary/90 text-lg px-8 py-3"
+                >
                 Bắt Đầu Miễn Phí
-              </Button>
+                </Button>
+              </Link>
               <Link href="/feed">
                 <Button
                   size="lg"
@@ -149,33 +145,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Login Modal */}
-      {showLogin && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-card rounded-lg shadow-xl max-w-md w-full"
-          >
-            <LoginForm onClose={() => setShowLogin(false)} />
-          </motion.div>
-        </div>
-      )}
-
-      {/* Register Modal */}
-      {showRegister && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-card rounded-lg shadow-xl max-w-md w-full"
-          >
-            <RegisterForm onClose={() => setShowRegister(false)} />
-          </motion.div>
-        </div>
-      )}
+      {/* Modals removed; use /login and /register routes */}
     </div>
   )
 }

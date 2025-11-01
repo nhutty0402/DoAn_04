@@ -9,8 +9,18 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { X, MapPin, Calendar, FileText, Map, Search } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { motion } from "framer-motion"
+import Cookies from "js-cookie"
+import { useRouter } from "next/navigation"
+import axios from "axios"
 
 interface CreateTripModalProps {
   onClose: () => void
@@ -18,12 +28,16 @@ interface CreateTripModalProps {
 }
 
 export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
+  const router = useRouter()
   const [formData, setFormData] = useState({
-    tenChuyenDi: "",
-    ngayBatDau: "",
-    ngayKetThuc: "",
-    moTa: "",
-    diaDiem: "",
+    ten_chuyen_di: "",
+    mo_ta: "",
+    dia_diem_xuat_phat: "",
+    ngay_bat_dau: "",
+    ngay_ket_thuc: "",
+    tien_te: "VND",
+    trang_thai: "planned",
+    cong_khai: "0", // "0" = riêng tư, "1" = công khai (string for Select)
     toaDo: null as { lat: number; lng: number } | null,
   })
   const [isLoading, setIsLoading] = useState(false)
@@ -34,7 +48,7 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
   const handleChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
 
-    if (field === "diaDiem" && value.length > 2) {
+    if (field === "dia_diem_xuat_phat" && value.length > 2) {
       // Simulate Google Places API search
       const mockSuggestions = [
         { id: 1, name: "Đà Nẵng, Việt Nam", address: "Đà Nẵng, Việt Nam", lat: 16.0544, lng: 108.2022 },
@@ -50,7 +64,7 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
 
       setLocationSuggestions(mockSuggestions)
       setShowSuggestions(mockSuggestions.length > 0)
-    } else if (field === "diaDiem" && value.length <= 2) {
+    } else if (field === "dia_diem_xuat_phat" && value.length <= 2) {
       setShowSuggestions(false)
     }
   }
@@ -58,7 +72,7 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
   const handleLocationSelect = (location: any) => {
     setFormData((prev) => ({
       ...prev,
-      diaDiem: location.name,
+      dia_diem_xuat_phat: location.name,
       toaDo: { lat: location.lat, lng: location.lng },
     }))
     setShowSuggestions(false)
@@ -68,7 +82,7 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (new Date(formData.ngayKetThuc) <= new Date(formData.ngayBatDau)) {
+    if (new Date(formData.ngay_ket_thuc) <= new Date(formData.ngay_bat_dau)) {
       toast({
         title: "Lỗi ngày tháng",
         description: "Ngày kết thúc phải sau ngày bắt đầu",
@@ -80,16 +94,97 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
     setIsLoading(true)
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      onSubmit(formData)
+      const token = Cookies.get("token") // ✅ lấy từ cookie
+      console.log("Token từ cookie:", token)
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("Không có token → chuyển về /login")
+        router.replace("/login")
+        return
+      }
+
+      // Lấy chu_so_huu_id từ tài khoản hiện tại
+      let ownerId = ""
+      try {
+        const meRes = await axios.get("https://travel-planner-imdw.onrender.com/api/taikhoan/toi", {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        ownerId = meRes.data?.nguoi_dung_id || ""
+      } catch (error) {
+        console.warn("Không thể lấy thông tin user:", error)
+      }
+
+      // Body chuẩn theo API yêu cầu
+      const bodyPayload = {
+        chuyen_di_id: null, // để null cho backend tự sinh
+        ten_chuyen_di: formData.ten_chuyen_di,
+        mo_ta: formData.mo_ta || "",
+        dia_diem_xuat_phat: formData.dia_diem_xuat_phat,
+        ngay_bat_dau: formData.ngay_bat_dau,
+        ngay_ket_thuc: formData.ngay_ket_thuc,
+        chu_so_huu_id: ownerId,
+        tien_te: formData.tien_te,
+        trang_thai: formData.trang_thai,
+        tao_luc: new Date().toISOString().replace('T', ' ').substring(0, 19), // Format: "2025-10-15 19:07:54"
+        cong_khai: Number(formData.cong_khai), // 0 hoặc 1
+      }
+
+      // Sử dụng axios để gọi API
+      const response = await axios.post("https://travel-planner-imdw.onrender.com/api/chuyendi", bodyPayload, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const created = response.data
+      
+      // Log để debug response structure
+      console.log("API Response:", created)
+      
+      // Kiểm tra cấu trúc response và chuẩn hóa
+      const normalizedResponse = {
+        chuyen_di_id: created?.chuyen_di_id || created?.id || null,
+        ten_chuyen_di: created?.ten_chuyen_di || created?.tenChuyenDi || "",
+        mo_ta: created?.mo_ta || created?.moTa || "",
+        dia_diem_xuat_phat: created?.dia_diem_xuat_phat || created?.diaDiemXuatPhat || "",
+        ngay_bat_dau: created?.ngay_bat_dau || created?.ngayBatDau || "",
+        ngay_ket_thuc: created?.ngay_ket_thuc || created?.ngayKetThuc || "",
+        chu_so_huu_id: created?.chu_so_huu_id || created?.chuSoHuuId || "",
+        tien_te: created?.tien_te || created?.tienTe || "VND",
+        trang_thai: created?.trang_thai || created?.trangThai || "planned",
+        tao_luc: created?.tao_luc || created?.taoLuc || new Date().toISOString(),
+        cong_khai: typeof created?.cong_khai === 'number' ? created.cong_khai : Number(created?.cong_khai ?? formData.cong_khai),
+      }
+
+      onSubmit(normalizedResponse)
       toast({
         title: "Tạo chuyến đi thành công!",
         description: "Chuyến đi mới đã được tạo và sẵn sàng để lập kế hoạch",
       })
-    } catch (error) {
+      onClose()
+    } catch (error: any) {
+      console.error("Error creating trip:", error)
+      
+      let errorMessage = "Có lỗi xảy ra khi tạo chuyến đi"
+      
+      if (axios.isAxiosError(error)) {
+        if (error.response) {
+          // Server responded with error status
+          errorMessage = error.response.data?.message || `HTTP ${error.response.status}: ${error.response.statusText}`
+        } else if (error.request) {
+          // Request was made but no response received
+          errorMessage = "Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng."
+        } else {
+          // Something else happened
+          errorMessage = error.message || "Có lỗi xảy ra khi tạo chuyến đi"
+        }
+      } else {
+        errorMessage = error?.message || errorMessage
+      }
+      
       toast({
         title: "Lỗi tạo chuyến đi",
-        description: "Có lỗi xảy ra khi tạo chuyến đi",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -118,15 +213,15 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="tenChuyenDi">Tên chuyến đi</Label>
+                <Label htmlFor="ten_chuyen_di">Tên chuyến đi</Label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
-                    id="tenChuyenDi"
+                    id="ten_chuyen_di"
                     type="text"
                     placeholder="Ví dụ: Du lịch Đà Nẵng"
-                    value={formData.tenChuyenDi}
-                    onChange={(e) => handleChange("tenChuyenDi", e.target.value)}
+                    value={formData.ten_chuyen_di}
+                    onChange={(e) => handleChange("ten_chuyen_di", e.target.value)}
                     className="pl-10"
                     required
                   />
@@ -134,15 +229,15 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="diaDiem">Địa điểm</Label>
+                <Label htmlFor="dia_diem_xuat_phat">Địa điểm xuất phát</Label>
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
-                    id="diaDiem"
+                    id="dia_diem_xuat_phat"
                     type="text"
                     placeholder="Tìm kiếm địa điểm..."
-                    value={formData.diaDiem}
-                    onChange={(e) => handleChange("diaDiem", e.target.value)}
+                    value={formData.dia_diem_xuat_phat}
+                    onChange={(e) => handleChange("dia_diem_xuat_phat", e.target.value)}
                     className="pl-10"
                     required
                   />
@@ -174,14 +269,14 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="ngayBatDau">Ngày bắt đầu</Label>
+                  <Label htmlFor="ngay_bat_dau">Ngày bắt đầu</Label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
-                      id="ngayBatDau"
+                      id="ngay_bat_dau"
                       type="date"
-                      value={formData.ngayBatDau}
-                      onChange={(e) => handleChange("ngayBatDau", e.target.value)}
+                      value={formData.ngay_bat_dau}
+                      onChange={(e) => handleChange("ngay_bat_dau", e.target.value)}
                       className="pl-10"
                       required
                     />
@@ -189,14 +284,14 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="ngayKetThuc">Ngày kết thúc</Label>
+                  <Label htmlFor="ngay_ket_thuc">Ngày kết thúc</Label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
-                      id="ngayKetThuc"
+                      id="ngay_ket_thuc"
                       type="date"
-                      value={formData.ngayKetThuc}
-                      onChange={(e) => handleChange("ngayKetThuc", e.target.value)}
+                      value={formData.ngay_ket_thuc}
+                      onChange={(e) => handleChange("ngay_ket_thuc", e.target.value)}
                       className="pl-10"
                       required
                     />
@@ -205,17 +300,66 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="moTa">Mô tả (tùy chọn)</Label>
+                <Label htmlFor="mo_ta">Mô tả (tùy chọn)</Label>
                 <div className="relative">
                   <FileText className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Textarea
-                    id="moTa"
+                    id="mo_ta"
                     placeholder="Mô tả ngắn về chuyến đi..."
-                    value={formData.moTa}
-                    onChange={(e) => handleChange("moTa", e.target.value)}
+                    value={formData.mo_ta}
+                    onChange={(e) => handleChange("mo_ta", e.target.value)}
                     className="pl-10 min-h-[80px] resize-none"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Tiền tệ</Label>
+                  <Select
+                    value={formData.tien_te}
+                    onValueChange={(val) => handleChange("tien_te", val)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Chọn tiền tệ" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="VND">VND</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+               <Label>Trạng thái</Label>
+              <Select
+              value={formData.trang_thai || "planned"}
+              onValueChange={(val) => handleChange("trang_thai", val)}
+               disabled // 🟦 không cho chỉnh
+                >
+               <SelectTrigger className="w-full opacity-70 cursor-not-allowed">
+                <SelectValue placeholder="Đang thực hiện" />
+                </SelectTrigger>
+                  <SelectContent>
+                  <SelectItem value="planned">Đang thực hiện</SelectItem>
+                 </SelectContent>
+                 </Select>
+                  </div>
+
+              </div>
+              <div className="space-y-2">
+              <Label htmlFor="cong_khai">Chế độ hiển thị</Label>
+              <Select
+                value={formData.cong_khai}
+               onValueChange={(val) => handleChange("cong_khai", val)}
+               >
+              <SelectTrigger id="cong_khai" className="w-full cong_khai">
+               <SelectValue placeholder="Chọn chế độ hiển thị" />
+              </SelectTrigger>
+              <SelectContent>
+              <SelectItem value="1">Công khai</SelectItem>
+              <SelectItem value="0">Riêng tư</SelectItem>
+              </SelectContent>
+              </Select>
               </div>
 
               <div className="flex gap-3 pt-4">
