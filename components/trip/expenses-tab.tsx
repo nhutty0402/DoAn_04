@@ -165,9 +165,9 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
           <h2 className="text-2xl font-bold text-foreground font-[family-name:var(--font-space-grotesk)]">
             Quản Lý Chi Phí
           </h2>
-          <p className="text-muted-foreground font-[family-name:var(--font-dm-sans)]">
+          {/* <p className="text-muted-foreground font-[family-name:var(--font-dm-sans)]">
             Theo dõi ngân sách và chia sẻ chi phí chuyến đi
-          </p>
+          </p> */}
         </div>
         <div className="flex gap-2">
           <Dialog open={showBudgetModal} onOpenChange={setShowBudgetModal}>
@@ -214,8 +214,8 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
         </div>
       </div>
 
-      {/* Budget Progress Bar */}
-      <Card
+      {/* THỐNG KÊ % NGÂN SÁCH*/}
+      {/* <Card
         className={`border-2 ${remainingBudget < 0 ? "border-red-200 bg-red-50/50" : budgetUsedPercentage > 80 ? "border-yellow-200 bg-yellow-50/50" : "border-green-200 bg-green-50/50"}`}
       >
         <CardContent className="p-6">
@@ -242,7 +242,7 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
             />
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

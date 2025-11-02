@@ -1,67 +1,27 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import axios from "axios"
+import Cookies from "js-cookie"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Bell, X, Check, MapPin, DollarSign, Users, MessageCircle, Calendar } from "lucide-react"
+import { Bell, X, Check, MapPin, DollarSign, Users, MessageCircle, Calendar, Loader2 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useToast } from "@/hooks/use-toast"
 
-// Mock notifications data
-const mockNotifications = [
-  {
-    id: "notif1",
-    type: "expense",
-    title: "Chi phí mới được thêm",
-    message: "Trần Thị B đã thêm chi phí 'Ăn trưa tại Chợ Hàn' - 480,000 VNĐ",
-    timestamp: "2024-03-14T11:30:00Z",
-    read: false,
-    tripId: "trip1",
-    tripName: "Du lịch Đà Nẵng",
-  },
-  {
-    id: "notif2",
-    type: "itinerary",
-    title: "Lịch trình được cập nhật",
-    message: "Nguyễn Văn A đã thêm điểm đến 'Bãi biển Mỹ Khê' vào ngày 15/03",
-    timestamp: "2024-03-14T10:45:00Z",
-    read: false,
-    tripId: "trip1",
-    tripName: "Du lịch Đà Nẵng",
-  },
-  {
-    id: "notif3",
-    type: "member",
-    title: "Thành viên mới tham gia",
-    message: "Phạm Thị D đã chấp nhận lời mời tham gia chuyến đi",
-    timestamp: "2024-03-14T09:15:00Z",
-    read: true,
-    tripId: "trip1",
-    tripName: "Du lịch Đà Nẵng",
-  },
-  {
-    id: "notif4",
-    type: "chat",
-    title: "Tin nhắn mới",
-    message: "Lê Văn C: Mình vừa thêm vé Bà Nà Hills vào chi phí rồi nhé",
-    timestamp: "2024-03-14T08:30:00Z",
-    read: true,
-    tripId: "trip1",
-    tripName: "Du lịch Đà Nẵng",
-  },
-  {
-    id: "notif5",
-    type: "booking",
-    title: "Đề xuất khách sạn",
-    message: "Tìm thấy 5 khách sạn phù hợp cho chuyến đi của bạn",
-    timestamp: "2024-03-13T16:20:00Z",
-    read: true,
-    tripId: "trip1",
-    tripName: "Du lịch Đà Nẵng",
-  },
-]
+interface Notification {
+  id: string
+  type: string
+  title: string
+  message: string
+  timestamp: string
+  read: boolean
+  tripId?: string
+  tripName?: string
+}
 
 interface NotificationCenterProps {
   isOpen: boolean
@@ -69,8 +29,98 @@ interface NotificationCenterProps {
 }
 
 export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps) {
-  const [notifications, setNotifications] = useState(mockNotifications)
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [loading, setLoading] = useState(false)
+  const router = useRouter()
   const { toast } = useToast()
+
+  // Map loai từ API sang type cho icon
+  const mapLoaiToType = (loai: string): string => {
+    const mapping: { [key: string]: string } = {
+      chi_phi: "expense",
+      lich_trinh: "itinerary",
+      thanh_vien: "member",
+      tin_nhan: "chat",
+      dat_phong: "booking",
+      chuyen_di: "trip",
+    }
+    return mapping[loai] || loai
+  }
+
+  // Tạo title từ loai và noi_dung
+  const generateTitle = (loai: string): string => {
+    const titleMap: { [key: string]: string } = {
+      chi_phi: "Chi phí mới được thêm",
+      lich_trinh: "Lịch trình được cập nhật",
+      thanh_vien: "Thành viên mới tham gia",
+      tin_nhan: "Tin nhắn mới",
+      dat_phong: "Đề xuất khách sạn",
+      chuyen_di: "Thông báo chuyến đi",
+    }
+    return titleMap[loai] || "Thông báo mới"
+  }
+
+  // Fetch notifications from API
+  useEffect(() => {
+    if (!isOpen) return
+
+    const fetchNotifications = async () => {
+      setLoading(true)
+      try {
+        const token = Cookies.get("token")
+        
+        if (!token || token === "null" || token === "undefined") {
+          console.warn("Không có token → chuyển về /login")
+          router.replace("/login")
+          return
+        }
+
+        const response = await axios.get("https://travel-planner-imdw.onrender.com/api/thong-bao", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        })
+
+        // Map API response to component format
+        // Backend trả về: { message, tong_so, chua_doc, danh_sach: [...] }
+        // Backend đã sắp xếp ORDER BY tao_luc DESC rồi
+        const apiData = response.data?.danh_sach || []
+        const mappedNotifications: Notification[] = apiData.map((item: any) => ({
+          id: String(item.thong_bao_id || ""),
+          type: mapLoaiToType(item.loai || ""),
+          title: generateTitle(item.loai || ""),
+          message: item.noi_dung || "",
+          timestamp: item.tao_luc || "",
+          read: Boolean(item.da_xem),
+          tripId: item.lien_ket || undefined,
+          tripName: undefined, // API không có tripName, có thể cần gọi thêm API nếu cần
+        }))
+
+        setNotifications(mappedNotifications)
+      } catch (error: any) {
+        console.error("❌ Lỗi khi tải thông báo:", error)
+        if (axios.isAxiosError(error) && error.response?.status === 401) {
+          toast({
+            title: "Lỗi xác thực",
+            description: "Phiên đăng nhập đã hết hạn",
+            variant: "destructive",
+          })
+          router.replace("/login")
+        } else {
+          toast({
+            title: "Lỗi",
+            description: error.response?.data?.message || error.message || "Không thể tải thông báo",
+            variant: "destructive",
+          })
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchNotifications()
+  }, [isOpen, router, toast])
 
   const unreadCount = notifications.filter((n) => !n.read).length
 
@@ -86,6 +136,8 @@ export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps)
         return <MessageCircle className="h-4 w-4 text-orange-600" />
       case "booking":
         return <Calendar className="h-4 w-4 text-pink-600" />
+      case "trip":
+        return <MapPin className="h-4 w-4 text-indigo-600" />
       default:
         return <Bell className="h-4 w-4 text-gray-600" />
     }
@@ -155,7 +207,13 @@ export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps)
             <ScrollArea className="h-[500px]">
               <div className="space-y-1">
                 <AnimatePresence>
-                  {notifications.length === 0 ? (
+                  {loading ? (
+                    <div className="text-center py-12">
+                      <Loader2 className="h-12 w-12 text-primary mx-auto mb-4 animate-spin" />
+                      <h3 className="text-lg font-semibold text-foreground mb-2">Đang tải thông báo...</h3>
+                      <p className="text-muted-foreground">Vui lòng đợi trong giây lát</p>
+                    </div>
+                  ) : notifications.length === 0 ? (
                     <div className="text-center py-12">
                       <Bell className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                       <h3 className="text-lg font-semibold text-foreground mb-2">Không có thông báo</h3>
@@ -168,7 +226,7 @@ export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps)
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 20 }}
-                        className={`p-4 border-b border-border hover:bg-muted/30 cursor-pointer transition-colors ${
+                        className={`p-4 border-b border-border hover:bg-muted/30 cursor-pointer transition-colors group ${
                           !notification.read ? "bg-primary/5 border-l-4 border-l-primary" : ""
                         }`}
                         onClick={() => !notification.read && markAsRead(notification.id)}
@@ -183,9 +241,11 @@ export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps)
                                   {notification.message}
                                 </p>
                                 <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-xs">
-                                    {notification.tripName}
-                                  </Badge>
+                                  {notification.tripName && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {notification.tripName}
+                                    </Badge>
+                                  )}
                                   <span className="text-xs text-muted-foreground">
                                     {formatTime(notification.timestamp)}
                                   </span>
