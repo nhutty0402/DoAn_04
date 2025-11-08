@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import {
   Calendar,
   Users,
-  MapPin,
+  Camera,
   DollarSign,
   Clock,
   TrendingUp,
@@ -54,12 +54,15 @@ export function OverviewTab({ trip }: OverviewTabProps) {
       icon: <Calendar className="h-5 w-5 text-primary" />,
       description: getDateRange(),
     },
-    {
-      title: "Địa điểm xuất phát",
-      value: trip?.dia_diem_xuat_phat || "Chưa cập nhật",
-      icon: <MapPin className="h-5 w-5 text-primary" />,
-      description: "Nơi bắt đầu hành trình",
-    },
+    // địa điểm xuất phát
+    // {
+    //   title: "Địa điểm xuất phát",
+    //   value: trip?.dia_diem_xuat_phat || "Chưa cập nhật",
+    //   icon: <MapPin className="h-5 w-5 text-primary" />,
+    //   description: "Nơi bắt đầu hành trình",
+    // },
+
+
     // khung dưới icon
     // {
     //   title: "Tiền tệ",
@@ -187,7 +190,7 @@ export function OverviewTab({ trip }: OverviewTabProps) {
   const getActivityIcon = (type: string) => {
     switch (type) {
       case "location":
-        return <MapPin className="h-3 w-3 text-blue-500" />
+        return <Camera className="h-3 w-3 text-blue-500" />
       case "expense":
         return <DollarSign className="h-3 w-3 text-green-500" />
       case "member":
@@ -290,8 +293,8 @@ export function OverviewTab({ trip }: OverviewTabProps) {
           </CardContent>
         </Card>
 
-        {/* Enhanced Recent Activities */}
-        <Card>
+        {/* Nhật ký hoạt động */}
+        {/* <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-primary" />
@@ -317,7 +320,7 @@ export function OverviewTab({ trip }: OverviewTabProps) {
               ))}
             </div>
           </CardContent>
-        </Card>
+        </Card> */}
       </div>
 
       {/* Quick Actions */}
@@ -340,9 +343,9 @@ export function OverviewTab({ trip }: OverviewTabProps) {
               <p className="font-medium text-sm">Thêm chi phí</p>
             </div>
             <div className="p-4 border border-border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
-              <MapPin className="h-6 w-6 text-primary mb-2" />
-              <p className="font-medium text-sm">Tìm địa điểm</p>
-            </div>
+  <Camera className="h-6 w-6 text-primary mb-2" />
+  <p className="font-medium text-sm">Kho lưu trữ</p>
+</div>
           </div>
         </CardContent>
       </Card>

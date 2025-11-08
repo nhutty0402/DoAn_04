@@ -100,7 +100,7 @@ export function RegisterForm({ onClose }: RegisterFormProps) {
                 placeholder="Nguyễn Văn A"
                 value={formData.ho_ten}
                 onChange={(e) => handleChange("ho_ten", e.target.value)}
-                className="pl-10"
+                className="pl-10 pr-10 placeholder:text-gray-400" // 👈 thêm dòng này
                 required
               />
             </div>
@@ -117,7 +117,7 @@ export function RegisterForm({ onClose }: RegisterFormProps) {
                 placeholder="your@email.com"
                 value={formData.email}
                 onChange={(e) => handleChange("email", e.target.value)}
-                className="pl-10"
+                className="pl-10 pr-10 placeholder:text-gray-400" // 👈 thêm dòng này
                 required
               />
             </div>
@@ -134,7 +134,7 @@ export function RegisterForm({ onClose }: RegisterFormProps) {
                 placeholder="0123 456 789"
                 value={formData.so_dien_thoai}
                 onChange={(e) => handleChange("so_dien_thoai", e.target.value)}
-                className="pl-10"
+                className="pl-10 pr-10 placeholder:text-gray-400" // 👈 thêm dòng này
                 required
               />
             </div>
@@ -148,12 +148,13 @@ export function RegisterForm({ onClose }: RegisterFormProps) {
               <Input
                 id="mat_khau"
                 type={showPassword ? "text" : "password"}
-                placeholder="••••••••"
+                placeholder="Nhập mật khẩu với 7 chữ số..."
                 value={formData.mat_khau}
                 onChange={(e) => handleChange("mat_khau", e.target.value)}
-                className="pl-10 pr-10"
+                className="pl-10 pr-10 placeholder:text-gray-400" // 👈 thêm dòng này
                 required
               />
+
               <Button
                 type="button"
                 variant="ghost"
@@ -174,10 +175,10 @@ export function RegisterForm({ onClose }: RegisterFormProps) {
               <Input
                 id="xacNhanMatKhau"
                 type={showConfirmPassword ? "text" : "password"}
-                placeholder="••••••••"
+                placeholder="Nhập lại mật khẩu..."
                 value={formData.xacNhanMatKhau}
                 onChange={(e) => handleChange("xacNhanMatKhau", e.target.value)}
-                className="pl-10 pr-10"
+                className="pl-10 pr-10 placeholder:text-gray-400" // 👈 thêm dòng này
                 required
               />
               <Button

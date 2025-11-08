@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import axios from "axios"
 import Cookies from "js-cookie"
 import { Button } from "@/components/ui/button"
@@ -25,7 +25,23 @@ interface MembersTabProps {
   currentUserId?: string
 }
 
-export function MembersTab({ members, tripId, currentUserId = "user1" }: MembersTabProps) {
+interface Member {
+  id: string
+  nguoi_dung_id: string | number
+  name: string
+  ho_ten: string
+  email: string
+  avatar_url: string
+  role: string
+  vai_tro: string
+  status: string
+  trang_thai_tham_gia: string
+  tham_gia_luc?: string
+  la_ban_be?: boolean | number
+  bi_chan?: boolean | number
+}
+
+export function MembersTab({ members: initialMembers, tripId, currentUserId }: MembersTabProps) {
   const [showInviteModal, setShowInviteModal] = useState(false)
   const { toast } = useToast()
   const [inviteInfo, setInviteInfo] = useState<{ ma_code: string; invite_link: string; qr_code: string } | null>(null)
@@ -36,9 +52,75 @@ export function MembersTab({ members, tripId, currentUserId = "user1" }: Members
   const [showPendingModal, setShowPendingModal] = useState(false)
   const [pendingList, setPendingList] = useState<any[]>([])
   const [loadingPending, setLoadingPending] = useState(false)
+  const [members, setMembers] = useState<Member[]>([])
+  const [loadingMembers, setLoadingMembers] = useState(false)
+  const [showMembersModal, setShowMembersModal] = useState(false)
+  const [membersCount, setMembersCount] = useState(0)
 
-  const currentUser = members.find((m) => m.id === currentUserId)
-  const isOwner = currentUser?.role === "owner"
+  // ✅ Fetch danh sách thành viên từ API
+  useEffect(() => {
+    const fetchMembers = async () => {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("Không có token để lấy danh sách thành viên")
+        return
+      }
+
+      setLoadingMembers(true)
+      try {
+        const response = await axios.get(
+          `https://travel-planner-imdw.onrender.com/api/thanh-vien/${tripId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        )
+
+        // Backend trả về: { message, tong_so, danh_sach: [...] }
+        const apiData = response.data?.danh_sach || []
+        const tongSo = response.data?.tong_so || 0
+        setMembersCount(tongSo)
+
+        // Map API response to component format
+        const mappedMembers: Member[] = apiData.map((item: any) => ({
+          id: String(item.nguoi_dung_id || ""),
+          nguoi_dung_id: item.nguoi_dung_id,
+          name: item.ho_ten || "",
+          ho_ten: item.ho_ten || "",
+          email: item.email || "",
+          avatar_url: item.avatar_url && item.avatar_url !== "null" ? item.avatar_url : "/placeholder-user.jpg",
+          role: item.vai_tro === "owner" ? "owner" : item.vai_tro === "admin" ? "admin" : "member",
+          vai_tro: item.vai_tro || "member",
+          status: item.trang_thai_tham_gia === "accepted" ? "accepted" : item.trang_thai_tham_gia === "pending" ? "pending" : "declined",
+          trang_thai_tham_gia: item.trang_thai_tham_gia || "pending",
+          tham_gia_luc: item.tham_gia_luc || "",
+          la_ban_be: Boolean(item.la_ban_be),
+          bi_chan: Boolean(item.bi_chan),
+        }))
+
+        setMembers(mappedMembers)
+      } catch (error: any) {
+        console.error("❌ Lỗi khi lấy danh sách thành viên:", error)
+        toast({
+          title: "Lỗi",
+          description: error.response?.data?.message || error.message || "Không thể tải danh sách thành viên",
+          variant: "destructive",
+        })
+      } finally {
+        setLoadingMembers(false)
+      }
+    }
+
+    if (tripId) {
+      fetchMembers()
+    }
+  }, [tripId, toast])
+
+
+  const currentUser = members.find((m) => String(m.nguoi_dung_id) === String(currentUserId))
+  const isOwner = currentUser?.role === "owner" || currentUser?.vai_tro === "owner"
   const canManageMembers = isOwner
 
   const getRoleIcon = (role: string) => {
@@ -232,30 +314,37 @@ export function MembersTab({ members, tripId, currentUserId = "user1" }: Members
         </Card>
       )} */}
 
-      {/* Members List */}
-      <div className="grid gap-4">
+      {/* hiển thị thành viên ra bên ngoài */}
+      
+      {/* <div className="grid gap-4">
         {members.map((member) => (
           <Card key={member.id}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-12 w-12">
-                    <AvatarImage src={`/generic-placeholder-icon.png?height=48&width=48`} alt={member.name} />
+                    <AvatarImage src={member.avatar_url} alt={member.ho_ten} />
                     <AvatarFallback className="bg-primary text-primary-foreground">
-                      {member.name
+                      {member.ho_ten
                         .split(" ")
                         .map((n: string) => n[0])
                         .join("")
-                        .toUpperCase()}
+                        .toUpperCase()
+                        .slice(0, 2)}
                     </AvatarFallback>
                   </Avatar>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-foreground">{member.name}</h3>
+                      <h3 className="font-semibold text-foreground">{member.ho_ten}</h3>
                       {getRoleIcon(member.role)}
-                      {member.id === currentUserId && (
+                      {String(member.nguoi_dung_id) === String(currentUserId) && (
                         <Badge variant="outline" className="text-xs">
                           Bạn
+                        </Badge>
+                      )}
+                      {Boolean(member.la_ban_be) && (
+                        <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
+                          Bạn bè
                         </Badge>
                       )}
                     </div>
@@ -266,7 +355,7 @@ export function MembersTab({ members, tripId, currentUserId = "user1" }: Members
                 <div className="flex items-center gap-2">
                   <Badge {...getStatusBadge(member.status)}>{getStatusBadge(member.status).label}</Badge>
                   {member.status === "pending" && <Clock className="h-4 w-4 text-muted-foreground" />}
-                  {canManageMembers && member.id !== currentUserId && member.status === "accepted" && (
+                  {canManageMembers && String(member.nguoi_dung_id) !== String(currentUserId) && member.status === "accepted" && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon">
@@ -276,7 +365,7 @@ export function MembersTab({ members, tripId, currentUserId = "user1" }: Members
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
                           onClick={() =>
-                            handleChangeRole(member.id, member.name, member.role === "owner" ? "member" : "owner")
+                            handleChangeRole(String(member.nguoi_dung_id), member.ho_ten, member.role === "owner" ? "member" : "owner")
                           }
                         >
                           <Settings className="h-4 w-4 mr-2" />
@@ -284,7 +373,7 @@ export function MembersTab({ members, tripId, currentUserId = "user1" }: Members
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
-                          onClick={() => handleRemoveMember(member.id, member.name)}
+                          onClick={() => handleRemoveMember(String(member.nguoi_dung_id), member.ho_ten)}
                           className="text-destructive focus:text-destructive"
                         >
                           <UserMinus className="h-4 w-4 mr-2" />
@@ -298,7 +387,7 @@ export function MembersTab({ members, tripId, currentUserId = "user1" }: Members
             </CardContent>
           </Card>
         ))}
-      </div>
+      </div> */}
 
       {/* LINK THAM GIA CHUYẾN ĐI */}
       <Card>
@@ -325,16 +414,19 @@ export function MembersTab({ members, tripId, currentUserId = "user1" }: Members
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
-        {/* <Card>
-          <CardContent className="p-4 text-center">
+        <Card>
+          <CardContent
+            className="p-4 text-center  cursor-pointer rounded-lg transition select-none"
+            onClick={() => setShowMembersModal(true)}
+          >
             <Users className="h-6 w-6 text-primary mx-auto mb-2" />
-            <p className="text-2xl font-bold text-foreground">{members.length}</p>
+            <p className="text-2xl font-bold text-foreground">{loadingMembers ? "..." : membersCount}</p>
             <p className="text-sm text-muted-foreground">Tổng thành viên</p>
           </CardContent>
-        </Card> */}
+        </Card>
         <Card>
          <CardContent
-           className="p-4 text-center hover:bg-accent cursor-pointer rounded-lg transition select-none"
+           className="p-4 text-center cursor-pointer rounded-lg transition select-none"
            onClick={handleShowFriends}
          >
            <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
@@ -349,7 +441,7 @@ export function MembersTab({ members, tripId, currentUserId = "user1" }: Members
         </Card>
         <Card>
           <CardContent
-            className="p-4 text-center hover:bg-accent cursor-pointer rounded-lg transition select-none"
+            className="p-4 text-center cursor-pointer rounded-lg transition select-none"
             onClick={handleShowPendingRequests}
           >
             <Clock className="h-6 w-6 text-yellow-500 mx-auto mb-2" />
@@ -488,6 +580,111 @@ export function MembersTab({ members, tripId, currentUserId = "user1" }: Members
               
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal danh sách thành viên */}
+      <Dialog open={showMembersModal} onOpenChange={setShowMembersModal}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogTitle>Danh sách thành viên ({membersCount})</DialogTitle>
+          <div className="flex-1 overflow-y-auto">
+            {loadingMembers ? (
+              <div className="flex items-center justify-center py-8">
+                <p className="text-muted-foreground">Đang tải danh sách thành viên...</p>
+              </div>
+            ) : members.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8">
+                <Users className="h-12 w-12 text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">Chưa có thành viên nào</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {members.map((member) => {
+                  const isCurrentUser = String(member.nguoi_dung_id) === String(currentUserId)
+                  const isFriend = Boolean(member.la_ban_be)
+                  const isBlocked = Boolean(member.bi_chan)
+
+                  return (
+                    <div key={member.id} className="flex items-center gap-3 border-b p-3 pb-3 last:border-0 hover:bg-muted/50 rounded-md transition">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={member.avatar_url} alt={member.ho_ten} />
+                        <AvatarFallback className="bg-primary text-primary-foreground">
+                          {member.ho_ten
+                            .split(" ")
+                            .map((n: string) => n[0])
+                            .join("")
+                            .toUpperCase()
+                            .slice(0, 2)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-semibold text-foreground truncate">{member.ho_ten}</h4>
+                          {getRoleIcon(member.role)}
+                          {isCurrentUser && (
+                            <Badge variant="outline" className="text-xs">
+                              Bạn
+                            </Badge>
+                          )}
+                          {isFriend && (
+                            <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
+                              Bạn bè
+                            </Badge>
+                          )}
+                          {isBlocked && (
+                            <Badge variant="destructive" className="text-xs">
+                              Đã chặn
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground truncate">{member.email}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge {...getStatusBadge(member.status)} className="text-xs">
+                            {getStatusBadge(member.status).label}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {getRoleLabel(member.role)}
+                          </span>
+                          {member.tham_gia_luc && (
+                            <span className="text-xs text-muted-foreground">
+                              • {new Date(member.tham_gia_luc).toLocaleDateString("vi-VN")}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {canManageMembers && !isCurrentUser && member.status === "accepted" && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() =>
+                                handleChangeRole(String(member.nguoi_dung_id), member.ho_ten, member.role === "owner" ? "member" : "owner")
+                              }
+                            >
+                              <Settings className="h-4 w-4 mr-2" />
+                              {member.role === "owner" ? "Chuyển thành thành viên" : "Chuyển thành chủ"}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleRemoveMember(String(member.nguoi_dung_id), member.ho_ten)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <UserMinus className="h-4 w-4 mr-2" />
+                              Xóa khỏi chuyến đi
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

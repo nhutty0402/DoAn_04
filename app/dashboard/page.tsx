@@ -280,6 +280,18 @@ export default function DashboardPage() {
               className="px-3 py-2 border border-border rounded-md bg-background text-foreground"
             >
               <option value="planning">Đang thực hiện</option>
+              <option value="completed">Hoàn thành</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="px-3 py-2 border border-border rounded-md bg-background text-foreground"
+            >
+              <option value="private">Riêng tư</option>
+              <option value="public">Công khai</option>
             </select>
           </div>
         </div>

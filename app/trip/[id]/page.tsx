@@ -335,7 +335,7 @@ return (
 </TabsTrigger>
 <TabsTrigger value="maps" className="flex items-center gap-2">
 <MapPin className="h-4 w-4" />
-<span className="hidden sm:inline">Bản đồ</span>
+<span className="hidden sm:inline">Gợi ý</span>
 </TabsTrigger>
 <TabsTrigger value="settings" className="flex items-center gap-2">
 <Settings className="h-4 w-4" />

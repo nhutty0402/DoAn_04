@@ -2,11 +2,13 @@
 
 import type React from "react"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
+import axios from "axios"
+import Cookies from "js-cookie"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Send, Paperclip, ImageIcon, Smile, Check, CheckCheck, X, Phone, Video, Search, Settings } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Send, Paperclip, ImageIcon, Smile, Check, CheckCheck, X, Phone, Video, Search, Settings, MessageCircle } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { motion, AnimatePresence } from "framer-motion"
 import { useToast } from "@/hooks/use-toast"
@@ -117,14 +119,14 @@ const mockMembers = [
   },
 ]
 
-const currentUserId = "user1"
+
 
 interface ChatTabProps {
   tripId: string
 }
 
 export function ChatTab({ tripId }: ChatTabProps) {
-  const [messages, setMessages] = useState(mockMessages)
+  const [messages, setMessages] = useState<any[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [typingUsers, setTypingUsers] = useState<string[]>([])
   const [isTyping, setIsTyping] = useState(false)
@@ -132,17 +134,149 @@ export function ChatTab({ tripId }: ChatTabProps) {
   const [previewImages, setPreviewImages] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [showSearch, setShowSearch] = useState(false)
+  const [isSending, setIsSending] = useState(false)
+  const [loadingMessages, setLoadingMessages] = useState(true)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
-
+  // Lấy currentUserId từ token
   useEffect(() => {
-    scrollToBottom()
-  }, [messages])
+    const token = Cookies.get("token")
+    if (token && token !== "null" && token !== "undefined") {
+      try {
+        const base64Url = token.split('.')[1]
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+        }).join(''))
+        const decoded = JSON.parse(jsonPayload)
+        setCurrentUserId(String(decoded.nguoi_dung_id || decoded.id || ""))
+      } catch (e) {
+        console.error("Lỗi decode token:", e)
+      }
+    }
+  }, [])
+
+  // ✅ Hàm fetch danh sách tin nhắn từ API
+  const fetchMessages = useCallback(async (showLoading = true) => {
+    const token = Cookies.get("token")
+    if (!token || token === "null" || token === "undefined") {
+      console.warn("Không có token để lấy tin nhắn")
+      if (showLoading) setLoadingMessages(false)
+      return
+    }
+
+    if (showLoading) setLoadingMessages(true)
+    try {
+      const response = await axios.get(
+        `https://travel-planner-imdw.onrender.com/api/tin-nhan/${tripId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      // Backend trả về: { message, tong_so, tin_nhan: [...] }
+      const apiData = response.data?.tin_nhan || []
+
+      // Map API response to component format
+      const mappedMessages = apiData.map((item: any) => ({
+        id: String(item.tin_nhan_id || ""),
+        userId: String(item.nguoi_dung_id || ""),
+        userName: item.ho_ten || "Người dùng",
+        content: item.noi_dung || "",
+        timestamp: item.tao_luc || new Date().toISOString(),
+        type: item.kieu === "image" ? ("image" as const) : ("text" as const),
+        images: item.tep_url ? [item.tep_url] : undefined,
+        avatar_url: item.avatar_url && item.avatar_url !== "null" ? item.avatar_url : "",
+        readBy: [],
+      }))
+
+      // Chỉ cập nhật nếu có tin nhắn mới (so sánh số lượng hoặc timestamp cuối cùng)
+      setMessages((prev) => {
+        const lastPrevId = prev.length > 0 ? prev[prev.length - 1].id : ""
+        const lastNewId = mappedMessages.length > 0 ? mappedMessages[mappedMessages.length - 1].id : ""
+        const lastPrevCount = prev.length
+        
+        // Nếu có tin nhắn mới, cập nhật và auto scroll nếu cần
+        if (lastNewId !== lastPrevId || mappedMessages.length !== prev.length) {
+          // Auto scroll nếu có tin nhắn mới từ người khác (chỉ khi user đang ở gần cuối)
+          const hasNewMessage = mappedMessages.length > lastPrevCount
+          if (hasNewMessage) {
+            const scrollContainer = document.querySelector('[data-radix-scroll-area-viewport]')
+            if (scrollContainer) {
+              const isNearBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 300
+              if (isNearBottom) {
+                setTimeout(() => scrollToBottom(), 100)
+              }
+            }
+          }
+          return mappedMessages
+        }
+        return prev
+      })
+    } catch (error: any) {
+      console.error("❌ Lỗi khi lấy tin nhắn:", error)
+      // Chỉ hiển thị toast khi fetch lần đầu
+      if (showLoading) {
+        toast({
+          title: "Lỗi",
+          description: error.response?.data?.message || error.message || "Không thể tải tin nhắn",
+          variant: "destructive",
+        })
+        if (error.response?.status === 403) {
+          setMessages([])
+        }
+      }
+    } finally {
+      if (showLoading) setLoadingMessages(false)
+    }
+  }, [tripId, toast])
+
+  // ✅ Fetch danh sách tin nhắn khi component mount
+  useEffect(() => {
+    if (tripId) {
+      fetchMessages(true)
+    }
+  }, [tripId, fetchMessages])
+
+  // ✅ Tự động cập nhật tin nhắn mới mỗi 3 giây
+  useEffect(() => {
+    if (!tripId) return
+
+    const interval = setInterval(() => {
+      // Chỉ fetch trong background, không hiển thị loading
+      fetchMessages(false)
+    }, 3000) // Poll mỗi 3 giây
+
+    return () => clearInterval(interval)
+  }, [tripId, fetchMessages])
+
+  const scrollToBottom = useCallback(() => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    }, 100)
+  }, [])
+
+  // Auto scroll khi có tin nhắn mới (chỉ khi user đang ở gần cuối)
+  useEffect(() => {
+    if (messages.length === 0) return
+
+    const scrollContainer = document.querySelector('[data-radix-scroll-area-viewport]')
+    if (scrollContainer) {
+      const isNearBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 300
+      if (isNearBottom) {
+        scrollToBottom()
+      }
+    } else {
+      // Fallback nếu không tìm thấy scroll container
+      scrollToBottom()
+    }
+  }, [messages.length, scrollToBottom])
 
   // Simulate typing indicator
   useEffect(() => {
@@ -154,46 +288,121 @@ export function ChatTab({ tripId }: ChatTabProps) {
     }
   }, [isTyping])
 
-  // Simulate other users typing
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (Math.random() > 0.8) {
-        const randomUser = mockMembers[Math.floor(Math.random() * mockMembers.length)]
-        if (randomUser.id !== currentUserId) {
-          setTypingUsers([randomUser.name])
-          setTimeout(() => setTypingUsers([]), 2000)
-        }
-      }
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [])
+  // Simulate other users typing (disabled for now, can be enabled if needed)
+  // useEffect(() => {
+  //   const interval = setInterval(() => {
+  //     if (Math.random() > 0.8) {
+  //       const randomUser = mockMembers[Math.floor(Math.random() * mockMembers.length)]
+  //       if (randomUser.id !== currentUserId) {
+  //         setTypingUsers([randomUser.name])
+  //         setTimeout(() => setTypingUsers([]), 2000)
+  //       }
+  //     }
+  //   }, 5000)
+  //   return () => clearInterval(interval)
+  // }, [currentUserId])
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newMessage.trim() && selectedImages.length === 0) return
 
-    const message = {
-      id: `msg${Date.now()}`,
-      userId: currentUserId,
-      userName: "Nguyễn Văn A",
-      content: newMessage,
-      timestamp: new Date().toISOString(),
-      type: selectedImages.length > 0 ? ("image" as const) : ("text" as const),
-      images: selectedImages.length > 0 ? previewImages : undefined,
-      readBy: [],
+    const token = Cookies.get("token")
+    if (!token || token === "null" || token === "undefined") {
+      toast({
+        title: "Lỗi",
+        description: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại",
+        variant: "destructive",
+      })
+      return
     }
 
-    setMessages([...messages, message])
-    setNewMessage("")
-    setSelectedImages([])
-    setPreviewImages([])
-    setIsTyping(false)
+    setIsSending(true)
 
-    toast({
-      title: "Tin nhắn đã gửi",
-      description:
-        selectedImages.length > 0 ? "Hình ảnh đã được gửi đến nhóm" : "Tin nhắn của bạn đã được gửi đến nhóm",
-    })
+    try {
+      let response
+
+      // Nếu có hình ảnh, gửi với FormData
+      if (selectedImages.length > 0) {
+        const formData = new FormData()
+        formData.append("chuyen_di_id", tripId)
+        formData.append("noi_dung", newMessage.trim() || "")
+        formData.append("kieu", "image")
+        // Backend nhận file với field name "tep"
+        formData.append("tep", selectedImages[0]) // Gửi 1 file đầu tiên (backend hiện tại chỉ hỗ trợ 1 file)
+
+        response = await axios.post(
+          "https://travel-planner-imdw.onrender.com/api/tin-nhan",
+          formData,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "multipart/form-data",
+            },
+          }
+        )
+      } else {
+        // Gửi tin nhắn text thông thường
+        response = await axios.post(
+          "https://travel-planner-imdw.onrender.com/api/tin-nhan",
+          {
+            chuyen_di_id: tripId,
+            noi_dung: newMessage.trim(),
+            kieu: "text",
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },  
+          }
+        )
+      }
+
+
+      // Backend trả về: { message, tin_nhan: { tin_nhan_id, chuyen_di_id, nguoi_dung_id, noi_dung, kieu, tep_url, tao_luc, ho_ten, avatar_url } }
+      const tinNhan = response.data?.tin_nhan
+      
+      if (tinNhan) {
+        // Map API response to component format
+        const newMessageItem = {
+          id: String(tinNhan.tin_nhan_id || `msg${Date.now()}`),
+          userId: String(tinNhan.nguoi_dung_id || ""),
+          userName: tinNhan.ho_ten || "Người dùng",
+          content: tinNhan.noi_dung || "",
+          timestamp: tinNhan.tao_luc || new Date().toISOString(),
+          type: tinNhan.kieu === "image" ? ("image" as const) : ("text" as const),
+          images: tinNhan.tep_url ? [tinNhan.tep_url] : undefined,
+          avatar_url: tinNhan.avatar_url || "",
+          readBy: [],
+        }
+
+        // Thêm tin nhắn mới vào danh sách
+        setMessages((prev) => {
+          // Kiểm tra xem tin nhắn đã tồn tại chưa (tránh duplicate)
+          const exists = prev.some((msg) => msg.id === newMessageItem.id)
+          if (exists) return prev
+          return [...prev, newMessageItem]
+        })
+        setNewMessage("")
+        setSelectedImages([])
+        setPreviewImages([])
+        setIsTyping(false)
+
+        // Refresh danh sách tin nhắn sau 1 giây để đảm bảo đồng bộ
+        setTimeout(() => {
+          fetchMessages(false)
+        }, 1000)
+      }
+    } catch (error: any) {
+      console.error("❌ Lỗi khi gửi tin nhắn:", error)
+      toast({
+        title: "Lỗi",
+        description: error.response?.data?.message || error.message || "Không thể gửi tin nhắn",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSending(false)
+    }
   }
 
   const handleTyping = (value: string) => {
@@ -204,18 +413,37 @@ export function ChatTab({ tripId }: ChatTabProps) {
   }
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
-    if (files.length > 0) {
-      setSelectedImages((prev) => [...prev, ...files])
+    const file = e.target.files?.[0]
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith("image/")) {
+        toast({
+          title: "Lỗi",
+          description: "Vui lòng chọn file ảnh hợp lệ",
+          variant: "destructive",
+        })
+        return
+      }
 
-      // Create preview URLs
-      files.forEach((file) => {
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          setPreviewImages((prev) => [...prev, e.target?.result as string])
-        }
-        reader.readAsDataURL(file)
-      })
+      // Validate file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "Lỗi",
+          description: "Kích thước ảnh không được vượt quá 10MB",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Backend chỉ hỗ trợ 1 file, nên chỉ lưu file đầu tiên
+      setSelectedImages([file])
+
+      // Create preview URL
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        setPreviewImages([e.target?.result as string])
+      }
+      reader.readAsDataURL(file)
     }
   }
 
@@ -291,11 +519,12 @@ export function ChatTab({ tripId }: ChatTabProps) {
               </div>
               <div>
                 <h3 className="font-semibold text-foreground font-[family-name:var(--font-space-grotesk)]">
-                  Chat Nhóm - Chuyến đi Đà Nẵng
+                  Chat Nhóm 
                 </h3>
-                <p className="text-sm text-muted-foreground">
+                {/* tổng thành viên đang hoạt động */}
+                {/* <p className="text-sm text-muted-foreground">
                   {onlineMembers.length} thành viên đang online • {mockMembers.length} tổng cộng
-                </p>
+                </p> */}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -341,9 +570,23 @@ export function ChatTab({ tripId }: ChatTabProps) {
         {/* Enhanced Messages Area */}
         <ScrollArea className="flex-1 p-4 bg-gradient-to-b from-blue-50/30 to-transparent dark:from-blue-950/10">
           <div className="space-y-4">
-            <AnimatePresence>
-              {(searchQuery ? filteredMessages : messages).map((message, index) => {
-                const isCurrentUser = message.userId === currentUserId
+            {loadingMessages ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-center">
+                  <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                  <p className="text-muted-foreground">Đang tải tin nhắn...</p>
+                </div>
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <MessageCircle className="h-12 w-12 text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">Chưa có tin nhắn nào</p>
+                <p className="text-sm text-muted-foreground mt-2">Hãy bắt đầu cuộc trò chuyện!</p>
+              </div>
+            ) : (
+              <AnimatePresence>
+                {(searchQuery ? filteredMessages : messages).map((message, index) => {
+                const isCurrentUser = currentUserId && String(message.userId) === String(currentUserId)
                 const showAvatar = index === 0 || messages[index - 1].userId !== message.userId
                 const showTimestamp =
                   index === messages.length - 1 ||
@@ -360,11 +603,16 @@ export function ChatTab({ tripId }: ChatTabProps) {
                   >
                     <div className={`flex-shrink-0 ${showAvatar ? "" : "invisible"}`}>
                       <Avatar className="h-8 w-8 ring-2 ring-background shadow-sm">
+                        {(message as any).avatar_url && (
+                          <AvatarImage src={(message as any).avatar_url} alt={message.userName} />
+                        )}
                         <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
                           {message.userName
                             .split(" ")
-                            .map((n) => n[0])
-                            .join("")}
+                            .map((n: string) => n[0])
+                            .join("")
+                            .toUpperCase()
+                            .slice(0, 2)}
                         </AvatarFallback>
                       </Avatar>
                     </div>
@@ -383,19 +631,31 @@ export function ChatTab({ tripId }: ChatTabProps) {
                       >
                         {message.type === "image" && message.images ? (
                           <div className="space-y-2">
-                            <div className="grid grid-cols-2 gap-2">
-                              {message.images.map((img, imgIndex) => (
+                            {message.images.map((img: string, imgIndex: number) => (
+                              <div key={imgIndex} className="relative group">
                                 <img
-                                  key={imgIndex}
                                   src={img || "/placeholder.svg"}
                                   alt="Shared image"
-                                  className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-80 transition-opacity"
+                                  className="rounded-lg max-w-[300px] max-h-[400px] w-auto h-auto object-contain cursor-pointer hover:opacity-90 transition-opacity"
                                   onClick={() => window.open(img, "_blank")}
+                                  onLoad={(e) => {
+                                    // Tự động điều chỉnh kích thước ảnh
+                                    const imgElement = e.target as HTMLImageElement
+                                    const maxWidth = 300
+                                    const maxHeight = 400
+                                    const ratio = Math.min(maxWidth / imgElement.naturalWidth, maxHeight / imgElement.naturalHeight, 1)
+                                    if (ratio < 1) {
+                                      imgElement.style.width = `${imgElement.naturalWidth * ratio}px`
+                                      imgElement.style.height = `${imgElement.naturalHeight * ratio}px`
+                                    }
+                                  }}
+                                  style={{ maxWidth: "300px", maxHeight: "400px" }}
                                 />
-                              ))}
-                            </div>
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-lg transition-colors pointer-events-none" />
+                              </div>
+                            ))}
                             {message.content && (
-                              <p className="text-sm font-[family-name:var(--font-dm-sans)]">{message.content}</p>
+                              <p className="text-sm font-[family-name:var(--font-dm-sans)] mt-2">{message.content}</p>
                             )}
                           </div>
                         ) : (
@@ -415,7 +675,8 @@ export function ChatTab({ tripId }: ChatTabProps) {
                   </motion.div>
                 )
               })}
-            </AnimatePresence>
+              </AnimatePresence>
+            )}
 
             {/* Enhanced Typing Indicator */}
             <AnimatePresence>
@@ -460,46 +721,76 @@ export function ChatTab({ tripId }: ChatTabProps) {
         <div className="p-4 border-t border-border bg-card">
           {/* Image Preview */}
           {previewImages.length > 0 && (
-            <div className="mb-3 p-3 bg-muted rounded-lg border border-border">
-              <div className="flex items-center gap-2 mb-2">
-                <ImageIcon className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium">Hình ảnh đã chọn ({previewImages.length})</span>
+            <div className="mb-3 p-3 bg-muted/50 rounded-lg border border-border">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">Hình ảnh đã chọn</span>
+                  {selectedImages[0] && (
+                    <span className="text-xs text-muted-foreground">
+                      ({(selectedImages[0].size / 1024).toFixed(2)} KB)
+                    </span>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedImages([])
+                    setPreviewImages([])
+                    if (fileInputRef.current) {
+                      fileInputRef.current.value = ""
+                    }
+                  }}
+                  className="text-xs h-7"
+                >
+                  Xóa tất cả
+                </Button>
               </div>
-              <div className="flex gap-2 overflow-x-auto">
-                {previewImages.map((img, index) => (
-                  <div key={index} className="relative flex-shrink-0">
-                    <img
-                      src={img || "/placeholder.svg"}
-                      alt={`Preview ${index + 1}`}
-                      className="w-16 h-16 object-cover rounded-lg border border-border"
-                    />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="icon"
-                      className="absolute -top-2 -right-2 h-6 w-6 shadow-lg"
-                      onClick={() => removeImage(index)}
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))}
+              <div className="relative group">
+                <div className="relative inline-block">
+                  <img
+                    src={previewImages[0] || "/placeholder.svg"}
+                    alt="Preview"
+                    className="max-w-[200px] max-h-[200px] w-auto h-auto object-contain rounded-lg border-2 border-primary/20"
+                    onLoad={(e) => {
+                      // Tự động điều chỉnh kích thước preview
+                      const imgElement = e.target as HTMLImageElement
+                      const maxSize = 200
+                      const ratio = Math.min(maxSize / imgElement.naturalWidth, maxSize / imgElement.naturalHeight, 1)
+                      if (ratio < 1) {
+                        imgElement.style.width = `${imgElement.naturalWidth * ratio}px`
+                        imgElement.style.height = `${imgElement.naturalHeight * ratio}px`
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute -top-2 -right-2 h-6 w-6 shadow-lg hover:scale-110 transition-transform"
+                    onClick={() => removeImage(0)}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
             </div>
           )}
 
           <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+            {/* gửi hình ảnh */}
             <input
               ref={fileInputRef}
               type="file"
               accept="image/*"
-              multiple
+
               className="hidden"
               onChange={handleImageSelect}
             />
-            <Button type="button" variant="ghost" size="icon" className="hover:bg-muted">
-              <Paperclip className="h-4 w-4" />
-            </Button>
+
+
             <Button
               type="button"
               variant="ghost"
@@ -516,23 +807,30 @@ export function ChatTab({ tripId }: ChatTabProps) {
                 placeholder="Nhập tin nhắn..."
                 className="pr-12 bg-background border-border focus:ring-2 focus:ring-primary/20"
               />
-              <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1 h-8 w-8">
+              {/* <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1 h-8 w-8">
                 <Smile className="h-4 w-4" />
-              </Button>
+              </Button> */}
             </div>
             <Button
               type="submit"
-              disabled={!newMessage.trim() && selectedImages.length === 0}
+              disabled={(!newMessage.trim() && selectedImages.length === 0) || isSending}
               className="bg-primary hover:bg-primary/90 shadow-sm"
             >
-              <Send className="h-4 w-4" />
+              {isSending ? (
+                <>
+                  <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Đang gửi...
+                </>
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
             </Button>
           </form>
         </div>
       </div>
 
-      {/* Enhanced Members Sidebar */}
-      <div className="w-72 border-l border-border bg-card">
+      {/* hoạt động của các thành viên   */}
+      {/* <div className="w-72 border-l border-border bg-card">
         <div className="p-4 border-b border-border bg-gradient-to-r from-blue-50 to-sky-50 dark:from-blue-950/20 dark:to-sky-950/20">
           <h4 className="font-semibold text-foreground font-[family-name:var(--font-space-grotesk)]">
             Thành Viên ({mockMembers.length})
@@ -659,7 +957,7 @@ export function ChatTab({ tripId }: ChatTabProps) {
             )}
           </div>
         </ScrollArea>
-      </div>
+      </div> */}
     </div>
   )
 }

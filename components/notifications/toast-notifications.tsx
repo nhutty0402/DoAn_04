@@ -14,21 +14,10 @@ export function useRealtimeNotifications() {
         // 10% chance every 10 seconds
         const notifications = [
           {
-            title: "Chi phí mới",
-            description: "Trần Thị B đã thêm chi phí mới vào chuyến đi",
+            title: "",
+            description: "",
           },
-          {
-            title: "Tin nhắn mới",
-            description: "Lê Văn C đã gửi tin nhắn trong nhóm chat",
-          },
-          {
-            title: "Lịch trình cập nhật",
-            description: "Nguyễn Văn A đã thêm điểm đến mới",
-          },
-          {
-            title: "Thành viên mới",
-            description: "Phạm Thị D đã tham gia chuyến đi",
-          },
+      
         ]
 
         const randomNotification = notifications[Math.floor(Math.random() * notifications.length)]

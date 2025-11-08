@@ -12,7 +12,7 @@ import { motion } from "framer-motion"
 import Link from "next/link"
 import { ReadOnlyOverviewTab } from "@/components/trip/read-only-overview-tab"
 import { ReadOnlyItineraryTab } from "@/components/trip/read-only-itinerary-tab"
-import { ReadOnlyMapsTab } from "@/components/trip/read-only-maps-tab"
+// import { ReadOnlyMapsTab } from "@/components/trip/read-only-maps-tab"
 
 // Mock data for the specific trip
 const getTripData = (id: string) => {
@@ -233,13 +233,13 @@ export default function PublicTripDetailPage() {
               </div>
               <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">{trip.title}</h1>
               <p className="text-xl text-white/90 mb-6 max-w-3xl">{trip.description}</p>
-              <div className="flex flex-wrap gap-2">
+              {/* <div className="flex flex-wrap gap-2">
                 {trip.tags.map((tag: string) => (
                   <Badge key={tag} variant="outline" className="border-white/30 text-white bg-white/10">
                     {tag}
                   </Badge>
                 ))}
-              </div>
+              </div> */}
             </motion.div>
           </div>
         </div>
@@ -254,7 +254,7 @@ export default function PublicTripDetailPage() {
               <TabsList className="grid w-full grid-cols-3 mb-8">
                 <TabsTrigger value="overview">Tổng quan</TabsTrigger>
                 <TabsTrigger value="itinerary">Lịch trình</TabsTrigger>
-                <TabsTrigger value="map">Bản đồ</TabsTrigger>
+                <TabsTrigger value="">chi phí</TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="space-y-6">
@@ -265,9 +265,9 @@ export default function PublicTripDetailPage() {
                 <ReadOnlyItineraryTab itinerary={trip.itinerary} />
               </TabsContent>
 
-              <TabsContent value="map" className="space-y-6">
+              {/* <TabsContent value="map" className="space-y-6">
                 <ReadOnlyMapsTab tripId={trip.id} />
-              </TabsContent>
+              </TabsContent> */}
             </Tabs>
           </div>
 

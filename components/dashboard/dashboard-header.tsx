@@ -100,7 +100,7 @@ export function DashboardHeader() {
 
         // ✅ Backend trả về: { message: '...', user: { nguoi_dung_id, ho_ten, email, so_dien_thoai, avatar_url, tao_luc } }
         const userData = res.data?.user || res.data || {}
-        
+
         // ✅ Cập nhật state người dùng
         setUser({
           nguoi_dung_id: String(userData.nguoi_dung_id || ""),
@@ -486,7 +486,7 @@ export function DashboardHeader() {
                   )}
                 </div>
                 <DropdownMenuSeparator />
-                
+
                 <DropdownMenuItem onClick={() => setShowEditModal(true)}>
                   <User className="mr-2 h-4 w-4" />
                   <span>Cập nhật thông tin</span>

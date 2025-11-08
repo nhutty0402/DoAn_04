@@ -331,10 +331,10 @@ export function LoginForm({ onClose }: LoginFormProps) {
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
+                  placeholder="Nhập mật khẩu"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 pr-10"
+                  className="pl-10 pr-10 placeholder:text-gray-400" // 👈 thêm dòng này"
                   required
                 />
                 <Button

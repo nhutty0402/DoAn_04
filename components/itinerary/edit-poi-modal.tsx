@@ -2,7 +2,9 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import Cookies from "js-cookie"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,27 +15,85 @@ import { useToast } from "@/hooks/use-toast"
 import { motion } from "framer-motion"
 import { MapboxGeocodingAutocomplete } from "@/components/ui/mapbox-geocoding-autocomplete"
 
-interface AddPoiModalProps {
+interface EditPoiModalProps {
+  poi: any
   dayId: string
   tripId: string
   onClose: () => void
-  onSubmit: (dayId: string, poiData: any) => void
+  onSubmit: (poiId: string, poiData: any) => void
 }
 
-export function AddPoiModal({ dayId, tripId, onClose, onSubmit }: AddPoiModalProps) {
+export function EditPoiModal({ poi, dayId, tripId, onClose, onSubmit }: EditPoiModalProps) {
   const [formData, setFormData] = useState({
-    tenDiaDiem: "",
-    loaiDiaDiem: "POI",
-    gioBatDau: "",
-    gioKetThuc: "",
-    ghiChu: "",
-    googlePlaceId: "", // Vẫn giữ field này để tương thích với backend
-    viDo: "",
-    kinhDo: "",
+    tenDiaDiem: poi?.tenDiaDiem || "",
+    loaiDiaDiem: poi?.loaiDiaDiem || "POI",
+    gioBatDau: poi?.gioBatDau || "",
+    gioKetThuc: poi?.gioKetThuc || "",
+    ghiChu: poi?.ghiChu || "",
+    googlePlaceId: "", // Sẽ được điền từ POI data nếu có
+    viDo: poi?.toaDo?.lat?.toString() || "",
+    kinhDo: poi?.toaDo?.lng?.toString() || "",
   })
-  const [mapboxSearch, setMapboxSearch] = useState("")
+  const [mapboxSearch, setMapboxSearch] = useState(poi?.tenDiaDiem || "")
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
+  const router = useRouter()
+
+  // Kiểm tra token khi component mount
+  useEffect(() => {
+    const token = Cookies.get("token") // ✅ lấy từ cookie
+    console.log("Token từ cookie:", token)
+
+    if (!token || token === "null" || token === "undefined") {
+      console.warn("Không có token → chuyển về /login")
+      toast({
+        title: "Lỗi xác thực",
+        description: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+        variant: "destructive",
+      })
+      router.replace("/login")
+    }
+  }, [router, toast])
+
+  useEffect(() => {
+    // Cập nhật formData khi poi thay đổi
+    console.log("EditPoiModal useEffect - POI nhận được:", poi)
+    console.log("EditPoiModal - poi.gioBatDau:", poi?.gioBatDau)
+    console.log("EditPoiModal - poi.gioKetThuc:", poi?.gioKetThuc)
+    
+    // Đảm bảo format giờ đúng (HH:mm) cho input type="time"
+    const formatTimeForInput = (timeValue: string | undefined | null): string => {
+      if (!timeValue) return ""
+      // Nếu là "HH:mm:ss", chỉ lấy "HH:mm"
+      if (timeValue.length === 8 && timeValue.match(/^\d{2}:\d{2}:\d{2}$/)) {
+        return timeValue.substring(0, 5)
+      }
+      // Nếu là "HH:mm", trả về trực tiếp
+      if (timeValue.length === 5 && timeValue.match(/^\d{2}:\d{2}$/)) {
+        return timeValue
+      }
+      // Nếu có format khác, thử parse
+      if (timeValue.includes(' ')) {
+        const timePart = timeValue.split(' ')[1]
+        if (timePart && timePart.length >= 5) {
+          return timePart.substring(0, 5)
+        }
+      }
+      return timeValue
+    }
+
+    setFormData({
+      tenDiaDiem: poi?.tenDiaDiem || "",
+      loaiDiaDiem: poi?.loaiDiaDiem || "POI",
+      gioBatDau: formatTimeForInput(poi?.gioBatDau),
+      gioKetThuc: formatTimeForInput(poi?.gioKetThuc),
+      ghiChu: poi?.ghiChu || "",
+      googlePlaceId: "",
+      viDo: poi?.toaDo?.lat?.toString() || "",
+      kinhDo: poi?.toaDo?.lng?.toString() || "",
+    })
+    setMapboxSearch(poi?.tenDiaDiem || "")
+  }, [poi])
 
   const poiTypes = [
     { value: "POI", label: "Điểm tham quan" },
@@ -58,7 +118,7 @@ export function AddPoiModal({ dayId, tripId, onClose, onSubmit }: AddPoiModalPro
     setFormData((prev) => ({
       ...prev,
       tenDiaDiem: placeName,
-      googlePlaceId: place.id || "", // Mapbox id thay cho Google Place ID
+      googlePlaceId: place.id || "",
       viDo: lat ? lat.toString() : "",
       kinhDo: lng ? lng.toString() : "",
     }))
@@ -75,10 +135,44 @@ export function AddPoiModal({ dayId, tripId, onClose, onSubmit }: AddPoiModalPro
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // Kiểm tra token trước khi submit
+    const token = Cookies.get("token") // ✅ lấy từ cookie
+    console.log("Token từ cookie:", token)
+
+    if (!token || token === "null" || token === "undefined") {
+      console.warn("Không có token → chuyển về /login")
+      toast({
+        title: "Lỗi xác thực",
+        description: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+        variant: "destructive",
+      })
+      router.replace("/login")
+      return
+    }
+
     if (formData.gioKetThuc <= formData.gioBatDau) {
       toast({
         title: "Lỗi thời gian",
         description: "Giờ kết thúc phải sau giờ bắt đầu",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Validation: Kiểm tra giờ bắt đầu và kết thúc có được nhập
+    if (!formData.gioBatDau || formData.gioBatDau.trim() === "") {
+      toast({
+        title: "Lỗi thời gian",
+        description: "Vui lòng nhập giờ bắt đầu",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!formData.gioKetThuc || formData.gioKetThuc.trim() === "") {
+      toast({
+        title: "Lỗi thời gian",
+        description: "Vui lòng nhập giờ kết thúc",
         variant: "destructive",
       })
       return
@@ -91,22 +185,25 @@ export function AddPoiModal({ dayId, tripId, onClose, onSubmit }: AddPoiModalPro
       const poiData = {
         tenDiaDiem: formData.tenDiaDiem,
         loaiDiaDiem: formData.loaiDiaDiem,
-        gioBatDau: formData.gioBatDau,
-        gioKetThuc: formData.gioKetThuc,
+        gioBatDau: formData.gioBatDau.trim(), // Đảm bảo loại bỏ khoảng trắng
+        gioKetThuc: formData.gioKetThuc.trim(), // Đảm bảo loại bỏ khoảng trắng
         ghiChu: formData.ghiChu,
         googlePlaceId: formData.googlePlaceId || "",
         viDo: formData.viDo || "",
         kinhDo: formData.kinhDo || "",
         toaDo: formData.viDo && formData.kinhDo 
           ? { lat: parseFloat(formData.viDo), lng: parseFloat(formData.kinhDo) }
-          : { lat: 16.0544 + Math.random() * 0.1, lng: 108.2272 + Math.random() * 0.1 }, // Mock coordinates nếu không có
+          : null,
       }
+
+      console.log("EditPoiModal - FormData trước khi submit:", formData)
+      console.log("EditPoiModal - POI Data gửi đi:", poiData)
       
-      onSubmit(dayId, poiData)
+      onSubmit(poi.id, poiData)
     } catch (error) {
       toast({
-        title: "Lỗi thêm điểm đến",
-        description: "Có lỗi xảy ra khi thêm điểm đến",
+        title: "Lỗi cập nhật điểm đến",
+        description: "Có lỗi xảy ra khi cập nhật điểm đến",
         variant: "destructive",
       })
     } finally {
@@ -127,9 +224,9 @@ export function AddPoiModal({ dayId, tripId, onClose, onSubmit }: AddPoiModalPro
             <Button variant="ghost" size="icon" className="absolute right-2 top-2" onClick={onClose}>
               <X className="h-4 w-4" />
             </Button>
-            <CardTitle className="text-2xl font-[family-name:var(--font-space-grotesk)]">Thêm Điểm Đến</CardTitle>
+            <CardTitle className="text-2xl font-[family-name:var(--font-space-grotesk)]">Chỉnh Sửa Điểm Đến</CardTitle>
             <CardDescription className="font-[family-name:var(--font-dm-sans)]">
-              Thêm một điểm đến mới vào ngày này
+              Cập nhật thông tin điểm đến này
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -152,16 +249,15 @@ export function AddPoiModal({ dayId, tripId, onClose, onSubmit }: AddPoiModalPro
                   <Input
                     id="tenDiaDiem"
                     type="text"
-                    placeholder="Tên địa điểm sẽ được điền tự động khi chọn từ Google"
+                    placeholder="Tên địa điểm"
                     value={formData.tenDiaDiem}
                     onChange={(e) => handleChange("tenDiaDiem", e.target.value)}
-                    className="pl-10 bg-muted/60 text-muted-foreground cursor-not-allowed"
+                    className="pl-10"
                     required
-                    readOnly  // 👈 thêm dòng này thôi
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  💡 Sử dụng tìm kiếm Mapbox ở trên để tự động điền thông tin, hoặc nhập thủ công
+                  💡 Sử dụng tìm kiếm Mapbox ở trên để tự động điền thông tin, hoặc chỉnh sửa thủ công
                 </p>
               </div>
 
@@ -192,7 +288,7 @@ export function AddPoiModal({ dayId, tripId, onClose, onSubmit }: AddPoiModalPro
                     placeholder="Mapbox Place ID"
                     value={formData.googlePlaceId}
                     onChange={(e) => handleChange("googlePlaceId", e.target.value)}
-                    className="pl-10 bg-muted/60 text-muted-foreground cursor-not-allowed"
+                    className="pl-10"
                     readOnly
                   />
                 </div>
@@ -219,8 +315,7 @@ export function AddPoiModal({ dayId, tripId, onClose, onSubmit }: AddPoiModalPro
                       placeholder="16.0544"
                       value={formData.viDo}
                       onChange={(e) => handleChange("viDo", e.target.value)}
-                      className="pl-10 bg-muted/60 text-muted-foreground cursor-not-allowed"
-                      readOnly
+                      className="pl-10"
                     />
                   </div>
                   {formData.viDo && (
@@ -241,8 +336,7 @@ export function AddPoiModal({ dayId, tripId, onClose, onSubmit }: AddPoiModalPro
                       placeholder="108.2272"
                       value={formData.kinhDo}
                       onChange={(e) => handleChange("kinhDo", e.target.value)}
-                      className="pl-10 bg-muted/60 text-muted-foreground cursor-not-allowed"
-                      readOnly
+                      className="pl-10"
                     />
                   </div>
                   {formData.kinhDo && (
@@ -304,7 +398,7 @@ export function AddPoiModal({ dayId, tripId, onClose, onSubmit }: AddPoiModalPro
                   Hủy
                 </Button>
                 <Button type="submit" className="flex-1 bg-primary hover:bg-primary/90" disabled={isLoading}>
-                  {isLoading ? "Đang thêm..." : "Thêm Điểm Đến"}
+                  {isLoading ? "Đang cập nhật..." : "Cập Nhật Điểm Đến"}
                 </Button>
               </div>
             </form>
@@ -314,3 +408,4 @@ export function AddPoiModal({ dayId, tripId, onClose, onSubmit }: AddPoiModalPro
     </div>
   )
 }
+

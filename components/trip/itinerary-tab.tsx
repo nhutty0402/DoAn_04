@@ -6,9 +6,10 @@ import Cookies from "js-cookie" // <-- THÊM
 import axios from "axios" // <-- THÊM
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Calendar, Clock, MapPin, GripVertical, Edit, Trash2, AlertCircle } from "lucide-react"
+import { Plus, Calendar, Clock, MapPin, GripVertical, Edit, Trash2, Pencil } from "lucide-react"
 import { AddDayModal } from "@/components/itinerary/add-day-modal"
 import { AddPoiModal } from "@/components/itinerary/add-poi-modal"
+import { EditPoiModal } from "@/components/itinerary/edit-poi-modal"
 import { EditDayModal } from "@/components/itinerary/edit-day-modal"
 import { Badge } from "@/components/ui/badge"
 import { motion, Reorder } from "framer-motion"
@@ -86,6 +87,7 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
   const [days, setDays] = useState(mockItinerary)
   const [showAddDayModal, setShowAddDayModal] = useState(false)
   const [showAddPoiModal, setShowAddPoiModal] = useState<string | null>(null)
+  const [editingPoi, setEditingPoi] = useState<{ poi: any; dayId: string } | null>(null)
   const [editingDay, setEditingDay] = useState<any>(null)
   const [isAddingDay, setIsAddingDay] = useState(false) // <-- Vẫn giữ state loading
   const [isLoadingDays, setIsLoadingDays] = useState(false) // <-- THÊM LOADING STATE
@@ -94,21 +96,93 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
 
   // <-- THÊM USEEFFECT ĐỂ LOAD DỮ LIỆU KHI COMPONENT MOUNT -->
   useEffect(() => {
-    fetchDaysFromAPI()
+    fetchDaysAndPoisFromAPI()
   }, [tripId]) // Chạy lại khi tripId thay đổi
+
+  // <-- THÊM FUNCTION FETCH TẤT CẢ ĐIỂM ĐẾN TỪ API -->
+  const fetchPoisFromAPI = async () => {
+    const token = Cookies.get("token")
+
+    // Kiểm tra token
+    if (!token || token === "null" || token === "undefined") {
+      console.warn("Không có token để fetch POIs")
+      return []
+    }
+
+    try {
+      // Gọi API GET để lấy tất cả điểm đến
+      const response = await axios.get(
+        `https://travel-planner-imdw.onrender.com/api/dia-diem`,
+        {
+          params: {
+            chuyen_di_id: tripId,
+          },
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+
+      // Backend trả về: { message, tong_so, danh_sach: [...] }
+      const apiPois = response.data?.danh_sach || []
+
+      // Chuyển đổi dữ liệu từ API (snake_case) sang state (camelCase)
+      const mappedPois = apiPois.map((poi: any) => ({
+        id: String(poi.dia_diem_id || `poi${Date.now()}`),
+        tenDiaDiem: poi.ten_dia_diem || "",
+        loaiDiaDiem: poi.loai_dia_diem || "POI",
+        gioBatDau: poi.thoi_gian_bat_dau
+          ? (typeof poi.thoi_gian_bat_dau === 'string'
+            ? poi.thoi_gian_bat_dau.substring(0, 5) // HH:mm:ss -> HH:mm
+            : poi.thoi_gian_bat_dau)
+          : "",
+        gioKetThuc: poi.thoi_gian_ket_thuc
+          ? (typeof poi.thoi_gian_ket_thuc === 'string'
+            ? poi.thoi_gian_ket_thuc.substring(0, 5) // HH:mm:ss -> HH:mm
+            : poi.thoi_gian_ket_thuc)
+          : "",
+        ghiChu: poi.ghi_chu || "",
+        toaDo: poi.vi_do && poi.kinh_do
+          ? { lat: parseFloat(poi.vi_do), lng: parseFloat(poi.kinh_do) }
+          : null,
+        thoiGianDiChuyen: Math.floor(Math.random() * 30) + 5, // Mock travel time
+        lich_trinh_ngay_id: poi.lich_trinh_ngay_id, // Giữ lại để map vào đúng ngày
+      }))
+
+      return mappedPois
+    } catch (error) {
+      console.error("Lỗi khi fetch POIs:", error)
+
+      // Xử lý lỗi 401
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        toast({
+          title: "Phiên đăng nhập hết hạn",
+          description: "Token không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.",
+          variant: "destructive",
+        })
+        router.replace("/login")
+      } else if (axios.isAxiosError(error) && error.response?.status === 403) {
+        // Không có quyền xem POIs - không hiển thị toast, chỉ log
+        console.warn("Không có quyền xem điểm đến của chuyến đi này")
+      } else if (axios.isAxiosError(error) && error.response?.status === 404) {
+        // Không tìm thấy chuyến đi
+        console.warn("Không tìm thấy chuyến đi")
+      }
+
+      return [] // Trả về mảng rỗng nếu có lỗi
+    }
+  }
 
   // <-- THÊM FUNCTION FETCH DAYS TỪ API -->
   const fetchDaysFromAPI = async () => {
     const token = Cookies.get("token")
-    
+
     // Kiểm tra token
     if (!token || token === "null" || token === "undefined") {
       console.warn("Không có token để fetch days")
-      return
+      return []
     }
 
-    setIsLoadingDays(true)
-    
     try {
       // Sử dụng axios params option để tránh vấn đề encoding
       const response = await axios.get(
@@ -118,7 +192,7 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
             Authorization: `Bearer ${token}`,
           },
         }
-      )      
+      )
 
       // Chuyển đổi dữ liệu từ API (snake_case) sang state (camelCase)
       const apiDays = response.data.danh_sach.map((day: any) => ({
@@ -126,19 +200,13 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
         ngay: day.ngay,
         tieuDe: day.tieu_de,
         ghiChu: day.ghi_chu,
-        pois: [], // Tạm thời để trống, có thể fetch POI riêng sau
+        pois: [], // Sẽ được map sau khi fetch POIs
       }))
 
-      // Sắp xếp và đánh số thứ tự ngày
-      updateDaysList(apiDays)
-      
-      toast({
-        title: "Đã tải lịch trình",
-        description: `Đã tải ${apiDays.length} ngày từ server`,
-      })
+      return apiDays
     } catch (error) {
       console.error("Lỗi khi fetch days:", error)
-      
+
       // Xử lý lỗi 401
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         toast({
@@ -147,14 +215,51 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
           variant: "destructive",
         })
         router.replace("/login")
-      } else {
-        toast({
-          title: "Lỗi tải dữ liệu",
-          description: "Không thể tải lịch trình từ server. Sử dụng dữ liệu mẫu.",
-          variant: "destructive",
-        })
-        // Giữ nguyên mock data khi có lỗi
       }
+
+      return [] // Trả về mảng rỗng nếu có lỗi
+    }
+  }
+
+  // <-- FUNCTION FETCH CẢ DAYS VÀ POIs -->
+  const fetchDaysAndPoisFromAPI = async () => {
+    setIsLoadingDays(true)
+
+    try {
+      // Fetch days và POIs song song
+      const [apiDays, apiPois] = await Promise.all([
+        fetchDaysFromAPI(),
+        fetchPoisFromAPI(),
+      ])
+
+      // Map POIs vào đúng ngày dựa trên lich_trinh_ngay_id
+      const daysWithPois = apiDays.map((day: any) => ({
+        ...day,
+        pois: apiPois
+          .filter((poi: any) => String(poi.lich_trinh_ngay_id) === String(day.id))
+          .sort((a: any, b: any) => a.gioBatDau.localeCompare(b.gioBatDau))
+          .map((poi: any) => {
+            // Loại bỏ lich_trinh_ngay_id khỏi POI object (không cần trong state)
+            const { lich_trinh_ngay_id, ...poiWithoutDayId } = poi
+            return poiWithoutDayId
+          }),
+      }))
+
+      // Sắp xếp và đánh số thứ tự ngày
+      updateDaysList(daysWithPois)
+
+      toast({
+        title: "Đã tải lịch trình",
+        description: `Đã tải ${daysWithPois.length} ngày và ${apiPois.length} điểm đến `,
+      })
+    } catch (error) {
+      console.error("Lỗi khi fetch days và POIs:", error)
+      toast({
+        title: "Lỗi tải dữ liệu",
+        description: "Không thể tải lịch trình từ server. Sử dụng dữ liệu mẫu.",
+        variant: "destructive",
+      })
+      // Giữ nguyên mock data khi có lỗi
     } finally {
       setIsLoadingDays(false)
     }
@@ -210,9 +315,9 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
         month: "long",
         day: "numeric",
       })
-    
+
       const rawTitle = day.tieuDe || "" // nếu null hoặc undefined → chuỗi rỗng
-    
+
       return {
         ...day,
         tieuDe: `Ngày ${dayNumber}: ${rawTitle.replace(/^Ngày \d+: /, '')}`,
@@ -220,7 +325,7 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
         formattedDate: formattedDate
       }
     })
-    
+
 
     return numberedDays
   }
@@ -271,7 +376,7 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
       console.log("Đang trong quá trình thêm ngày, bỏ qua request")
       return
     }
-    
+
     // <-- THÊM VALIDATION NGÀY TRƯỚC KHI THÊM -->
     const dateValidation = validateDayDate(dayData.ngay)
     if (!dateValidation.isValid) {
@@ -304,10 +409,10 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
       })
       return
     }
-    
+
     setIsAddingDay(true) // Bắt đầu loading
     console.log("Bắt đầu thêm ngày:", dayData.ngay)
-    
+
     // Lấy token từ cookie
     const token = Cookies.get("token")
     console.log("Token từ cookie:", token)
@@ -352,7 +457,7 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
 
       // Xử lý response từ API
       console.log("Response từ API thêm ngày:", response.data)
-      
+
       if (response.data) {
         // Ánh xạ dữ liệu trả về từ API (snake_case) sang state (camelCase)
         const newDayForState = {
@@ -363,9 +468,21 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
           pois: [], // Ngày mới chưa có POI
         }
 
-        // Thêm ngày mới và sắp xếp lại
+        // Thêm ngày mới và refresh POIs
         const updatedDays = [...days, newDayForState]
-        updateDaysList(updatedDays)
+        // Refresh POIs để map đúng vào ngày mới
+        const updatedPois = await fetchPoisFromAPI()
+        const daysWithPois = updatedDays.map((day: any) => ({
+          ...day,
+          pois: updatedPois
+            .filter((poi: any) => String(poi.lich_trinh_ngay_id) === String(day.id))
+            .sort((a: any, b: any) => a.gioBatDau.localeCompare(b.gioBatDau))
+            .map((poi: any) => {
+              const { lich_trinh_ngay_id, ...poiWithoutDayId } = poi
+              return poiWithoutDayId
+            }),
+        }))
+        updateDaysList(daysWithPois)
       } else {
         // Fallback nếu không có response data
         const newDayForState = {
@@ -436,7 +553,7 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
 
     // Lấy token từ cookie
     const token = Cookies.get("token")
-    
+
     // Kiểm tra token
     if (!token || token === "null" || token === "undefined") {
       toast({
@@ -449,20 +566,27 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
     }
 
     try {
-      // Chuẩn bị payload theo format API
+      // Chuẩn bị payload theo format API (backend yêu cầu HH:mm:ss cho thoi_gian_bat_dau và thoi_gian_ket_thuc)
+      // Backend sẽ convert string HH:mm:ss thành TIME format
+      const formatTime = (timeValue: string) => {
+        // Nếu input type="time" trả về "HH:mm", thêm ":00" để thành "HH:mm:ss"
+        if (timeValue && timeValue.length === 5) {
+          return `${timeValue}:00`
+        }
+        return timeValue || null
+      }
+
       const payload = {
-        dia_diem_id: null, // Sẽ được tạo bởi backend
         chuyen_di_id: tripId,
         lich_trinh_ngay_id: dayId,
         ten_dia_diem: poiData.tenDiaDiem,
-        loai_dia_diem: poiData.loaiDiaDiem,
-        google_place_id: poiData.googlePlaceId || "",
-        vi_do: poiData.viDo || (poiData.toaDo?.lat?.toString() || ""),
-        kinh_do: poiData.kinhDo || (poiData.toaDo?.lng?.toString() || ""),
-        thoi_gian_bat_dau: poiData.gioBatDau,
-        thoi_gian_ket_thuc: poiData.gioKetThuc,
-        ghi_chu: poiData.ghiChu || "",
-        tao_luc: new Date().toISOString(),
+        loai_dia_diem: poiData.loaiDiaDiem || "POI",
+        google_place_id: poiData.googlePlaceId || null,
+        vi_do: poiData.viDo ? parseFloat(poiData.viDo) : (poiData.toaDo?.lat || null),
+        kinh_do: poiData.kinhDo ? parseFloat(poiData.kinhDo) : (poiData.toaDo?.lng || null),
+        thoi_gian_bat_dau: formatTime(poiData.gioBatDau),
+        thoi_gian_ket_thuc: formatTime(poiData.gioKetThuc),
+        ghi_chu: poiData.ghiChu || null,
       }
 
       console.log("Payload gửi lên API thêm điểm:", payload)
@@ -480,38 +604,67 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
 
       console.log("Response từ API thêm điểm:", response.data)
 
-      // Xử lý response từ API
-      if (response.data) {
-        // Tạo POI object cho local state
+      // Backend trả về: { message, dia_diem: {...}, canh_bao: [...] }
+      const diaDiemData = response.data?.dia_diem || response.data
+      const canhBao = response.data?.canh_bao || []
+
+      if (diaDiemData) {
+        // Tạo POI object từ API response
         const newPoi = {
-          id: response.data.dia_diem_id || response.data.id || `poi${Date.now()}`,
-          tenDiaDiem: poiData.tenDiaDiem,
-          loaiDiaDiem: poiData.loaiDiaDiem,
-          gioBatDau: poiData.gioBatDau,
-          gioKetThuc: poiData.gioKetThuc,
-          ghiChu: poiData.ghiChu,
-          toaDo: poiData.toaDo,
+          id: String(diaDiemData.dia_diem_id || `poi${Date.now()}`),
+          tenDiaDiem: diaDiemData.ten_dia_diem || poiData.tenDiaDiem,
+          loaiDiaDiem: diaDiemData.loai_dia_diem || poiData.loaiDiaDiem,
+          gioBatDau: diaDiemData.thoi_gian_bat_dau
+            ? (typeof diaDiemData.thoi_gian_bat_dau === 'string'
+              ? diaDiemData.thoi_gian_bat_dau.split(' ')[1]?.substring(0, 5)
+              : poiData.gioBatDau)
+            : poiData.gioBatDau,
+          gioKetThuc: diaDiemData.thoi_gian_ket_thuc
+            ? (typeof diaDiemData.thoi_gian_ket_thuc === 'string'
+              ? diaDiemData.thoi_gian_ket_thuc.split(' ')[1]?.substring(0, 5)
+              : poiData.gioKetThuc)
+            : poiData.gioKetThuc,
+          ghiChu: diaDiemData.ghi_chu || poiData.ghiChu || "",
+          toaDo: diaDiemData.vi_do && diaDiemData.kinh_do
+            ? { lat: parseFloat(diaDiemData.vi_do), lng: parseFloat(diaDiemData.kinh_do) }
+            : poiData.toaDo,
           thoiGianDiChuyen: Math.floor(Math.random() * 30) + 5, // Mock travel time
         }
 
-        // Cập nhật local state
-        setDays(
-          days.map((day) =>
-            day.id === dayId
-              ? { ...day, pois: [...day.pois, newPoi].sort((a, b) => a.gioBatDau.localeCompare(b.gioBatDau)) }
-              : day,
-          ),
-        )
-        
+        // Refresh lại danh sách POIs từ API để đảm bảo đồng bộ
+        // Hoặc thêm POI mới vào state (optimistic update)
+        const updatedPois = await fetchPoisFromAPI()
+        const updatedDays = days.map((day) => ({
+          ...day,
+          pois: updatedPois
+            .filter((poi: any) => String(poi.lich_trinh_ngay_id) === String(day.id))
+            .sort((a: any, b: any) => a.gioBatDau.localeCompare(b.gioBatDau))
+            .map((poi: any) => {
+              const { lich_trinh_ngay_id, ...poiWithoutDayId } = poi
+              return poiWithoutDayId
+            }),
+        }))
+        setDays(updatedDays)
+
         setShowAddPoiModal(null)
-        toast({
-          title: "Đã thêm điểm đến",
-          description: "Điểm đến mới đã được thêm vào lịch trình",
-        })
+
+        // Hiển thị toast với cảnh báo nếu có
+        if (canhBao.length > 0) {
+          toast({
+            title: "Đã thêm điểm đến (có cảnh báo)",
+            description: response.data?.message || `Có ${canhBao.length} hoạt động trùng khung giờ`,
+            variant: "default",
+          })
+        } else {
+          toast({
+            title: "Đã thêm điểm đến",
+            description: response.data?.message || "Điểm đến mới đã được thêm vào lịch trình",
+          })
+        }
       }
     } catch (error) {
       console.error("Lỗi khi thêm điểm:", error)
-      
+
       // Xử lý lỗi 401
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         toast({
@@ -520,6 +673,23 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
           variant: "destructive",
         })
         router.replace("/login")
+      } else if (axios.isAxiosError(error) && error.response?.status === 409) {
+        // Xử lý lỗi 409 - Conflict (trùng khung giờ)
+        const errorMessage = error.response?.data?.message || "Trùng khung giờ với hoạt động khác"
+        const canhBao = error.response?.data?.canh_bao || []
+        toast({
+          title: "Trùng khung giờ",
+          description: errorMessage + (canhBao.length > 0 ? `. ${canhBao.length} hoạt động trùng.` : ""),
+          variant: "destructive",
+        })
+      } else if (axios.isAxiosError(error) && error.response?.status === 403) {
+        // Xử lý lỗi 403 - Forbidden (không phải chủ chuyến đi)
+        const errorMessage = error.response?.data?.message || "Chỉ chủ chuyến đi mới được thêm điểm đến"
+        toast({
+          title: "Không có quyền",
+          description: errorMessage,
+          variant: "destructive",
+        })
       } else if (axios.isAxiosError(error) && error.response?.status === 400) {
         // Xử lý lỗi 400 - Bad Request
         const errorMessage = error.response?.data?.message || "Dữ liệu không hợp lệ"
@@ -544,13 +714,286 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
     }
   }
 
-  const handleDeletePoi = (dayId: string, poiId: string) => {
-    // ... (hàm này không thay đổi) ...
-    setDays(days.map((day) => (day.id === dayId ? { ...day, pois: day.pois.filter((poi) => poi.id !== poiId) } : day)))
-    toast({
-      title: "Đã xóa điểm đến",
-      description: "Điểm đến đã được xóa khỏi lịch trình",
-    })
+  const handleEditPoi = async (poiId: string, poiData: any) => {
+    // Lấy token từ cookie
+    const token = Cookies.get("token")
+    
+    // Kiểm tra token
+    if (!token || token === "null" || token === "undefined") {
+      toast({
+        title: "Lỗi xác thực",
+        description: "Không tìm thấy token. Đang chuyển về trang đăng nhập.",
+        variant: "destructive",
+      })
+      router.replace("/login")
+      return
+    }
+
+    if (!editingPoi) return
+
+    try {
+      // Validation: Kiểm tra giờ bắt đầu và kết thúc có được nhập
+      const gioBatDauValue = poiData.gioBatDau?.trim() || ""
+      const gioKetThucValue = poiData.gioKetThuc?.trim() || ""
+
+      console.log("=== DEBUG handleEditPoi ===")
+      console.log("poiData nhận từ modal:", poiData)
+      console.log("gioBatDauValue:", gioBatDauValue)
+      console.log("gioKetThucValue:", gioKetThucValue)
+
+      if (!gioBatDauValue || gioBatDauValue === "") {
+        toast({
+          title: "Lỗi thời gian",
+          description: "Vui lòng nhập giờ bắt đầu",
+          variant: "destructive",
+        })
+        return
+      }
+
+      if (!gioKetThucValue || gioKetThucValue === "") {
+        toast({
+          title: "Lỗi thời gian",
+          description: "Vui lòng nhập giờ kết thúc",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Chuẩn bị payload theo format API (backend yêu cầu HH:mm:ss cho thoi_gian_bat_dau và thoi_gian_ket_thuc)
+      const formatTime = (timeValue: string | undefined | null): string | null => {
+        if (!timeValue || typeof timeValue !== 'string') return null
+        
+        const trimmed = timeValue.trim()
+        if (!trimmed) return null
+
+        // Nếu input type="time" trả về "HH:mm", thêm ":00" để thành "HH:mm:ss"
+        if (trimmed.length === 5 && trimmed.match(/^\d{2}:\d{2}$/)) {
+          return `${trimmed}:00`
+        }
+        
+        // Nếu đã là "HH:mm:ss", trả về trực tiếp
+        if (trimmed.length === 8 && trimmed.match(/^\d{2}:\d{2}:\d{2}$/)) {
+          return trimmed
+        }
+        
+        // Nếu có format khác (VD: "1970-01-01 HH:mm:ss"), extract phần giờ
+        if (trimmed.includes(' ')) {
+          const timePart = trimmed.split(' ')[1]
+          if (timePart && timePart.length >= 5) {
+            if (timePart.length === 5) {
+              return `${timePart}:00`
+            }
+            return timePart.substring(0, 8)
+          }
+        }
+        
+        return null
+      }
+
+      const formattedGioBatDau = formatTime(gioBatDauValue)
+      const formattedGioKetThuc = formatTime(gioKetThucValue)
+
+      if (!formattedGioBatDau || !formattedGioKetThuc) {
+        toast({
+          title: "Lỗi thời gian",
+          description: "Giờ bắt đầu hoặc giờ kết thúc không hợp lệ. Vui lòng kiểm tra lại.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const payload = {
+        chuyen_di_id: tripId,
+        lich_trinh_ngay_id: editingPoi.dayId,
+        ten_dia_diem: poiData.tenDiaDiem,
+        loai_dia_diem: poiData.loaiDiaDiem || "POI",
+        google_place_id: poiData.googlePlaceId || null,
+        vi_do: poiData.viDo ? parseFloat(poiData.viDo) : (poiData.toaDo?.lat || null),
+        kinh_do: poiData.kinhDo ? parseFloat(poiData.kinhDo) : (poiData.toaDo?.lng || null),
+        thoi_gian_bat_dau: formattedGioBatDau,
+        thoi_gian_ket_thuc: formattedGioKetThuc,
+        ghi_chu: poiData.ghiChu || null,
+      }
+
+      console.log("Formatted gioBatDau:", formattedGioBatDau)
+      console.log("Formatted gioKetThuc:", formattedGioKetThuc)
+      console.log("Payload gửi lên API sửa điểm:", payload)
+      console.log("=== END DEBUG ===")
+
+      // Gọi API PUT để sửa điểm
+      const response = await axios.put(
+        `https://travel-planner-imdw.onrender.com/api/dia-diem/sua/${poiId}`,
+        payload,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+
+      console.log("Response từ API sửa điểm:", response.data)
+
+      const canhBao = response.data?.canh_bao || []
+
+      // Refresh lại danh sách POIs từ API để đảm bảo đồng bộ
+      const updatedPois = await fetchPoisFromAPI()
+      const updatedDays = days.map((day) => ({
+        ...day,
+        pois: updatedPois
+          .filter((poi: any) => String(poi.lich_trinh_ngay_id) === String(day.id))
+          .sort((a: any, b: any) => a.gioBatDau.localeCompare(b.gioBatDau))
+          .map((poi: any) => {
+            const { lich_trinh_ngay_id, ...poiWithoutDayId } = poi
+            return poiWithoutDayId
+          }),
+      }))
+      setDays(updatedDays)
+
+      setEditingPoi(null)
+
+      // Hiển thị toast với cảnh báo nếu có
+      if (canhBao.length > 0) {
+        toast({
+          title: "Đã cập nhật điểm đến (có cảnh báo)",
+          description: response.data?.message || `Có ${canhBao.length} hoạt động trùng khung giờ`,
+          variant: "default",
+        })
+      } else {
+        toast({
+          title: "Đã cập nhật điểm đến",
+          description: response.data?.message || "Điểm đến đã được cập nhật thành công",
+        })
+      }
+    } catch (error) {
+      console.error("Lỗi khi sửa điểm:", error)
+
+      // Xử lý lỗi 401
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        toast({
+          title: "Phiên đăng nhập hết hạn",
+          description: "Token không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.",
+          variant: "destructive",
+        })
+        router.replace("/login")
+      } else if (axios.isAxiosError(error) && error.response?.status === 409) {
+        // Xử lý lỗi 409 - Conflict (trùng khung giờ)
+        const errorMessage = error.response?.data?.message || "Trùng khung giờ với hoạt động khác"
+        const canhBao = error.response?.data?.canh_bao || []
+        toast({
+          title: "Trùng khung giờ",
+          description: errorMessage + (canhBao.length > 0 ? `. ${canhBao.length} hoạt động trùng.` : ""),
+          variant: "destructive",
+        })
+      } else if (axios.isAxiosError(error) && error.response?.status === 403) {
+        // Xử lý lỗi 403 - Forbidden (không phải chủ chuyến đi)
+        const errorMessage = error.response?.data?.message || "Chỉ chủ chuyến đi mới được sửa điểm đến"
+        toast({
+          title: "Không có quyền",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      } else if (axios.isAxiosError(error) && error.response?.status === 400) {
+        // Xử lý lỗi 400 - Bad Request
+        const errorMessage = error.response?.data?.message || "Dữ liệu không hợp lệ"
+        toast({
+          title: "Dữ liệu không hợp lệ",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      } else if (axios.isAxiosError(error) && error.response?.status === 404) {
+        toast({
+          title: "Không tìm thấy điểm đến",
+          description: "Điểm đến này có thể đã bị xóa.",
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Lỗi cập nhật điểm đến",
+          description: "Không thể cập nhật điểm đến. Vui lòng thử lại.",
+          variant: "destructive",
+        })
+      }
+    }
+  }
+
+  const handleDeletePoi = async (dayId: string, poiId: string) => {
+    // Xác nhận trước khi xóa
+    const confirmed = window.confirm("Bạn có chắc chắn muốn xóa điểm đến này?")
+    if (!confirmed) return
+
+    // Lấy token từ cookie
+    const token = Cookies.get("token")
+
+    // Kiểm tra token
+    if (!token || token === "null" || token === "undefined") {
+      toast({
+        title: "Lỗi xác thực",
+        description: "Không tìm thấy token. Đang chuyển về trang đăng nhập.",
+        variant: "destructive",
+      })
+      router.replace("/login")
+      return
+    }
+
+    try {
+      // Gọi API DELETE để xóa điểm đến
+      await axios.delete(
+        `https://travel-planner-imdw.onrender.com/api/dia-diem/xoa/${poiId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+
+      // Refresh lại danh sách POIs từ API
+      const updatedPois = await fetchPoisFromAPI()
+      const updatedDays = days.map((day) => ({
+        ...day,
+        pois: updatedPois
+          .filter((poi: any) => String(poi.lich_trinh_ngay_id) === String(day.id))
+          .sort((a: any, b: any) => a.gioBatDau.localeCompare(b.gioBatDau))
+          .map((poi: any) => {
+            const { lich_trinh_ngay_id, ...poiWithoutDayId } = poi
+            return poiWithoutDayId
+          }),
+      }))
+      setDays(updatedDays)
+
+      toast({
+        title: "Đã xóa điểm đến",
+        description: "Điểm đến đã được xóa khỏi lịch trình",
+      })
+    } catch (error) {
+      console.error("Lỗi khi xóa điểm đến:", error)
+
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        toast({
+          title: "Phiên đăng nhập hết hạn",
+          description: "Token không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.",
+          variant: "destructive",
+        })
+        router.replace("/login")
+      } else if (axios.isAxiosError(error) && error.response?.status === 403) {
+        toast({
+          title: "Không có quyền",
+          description: "Chỉ chủ chuyến đi mới được xóa điểm đến.",
+          variant: "destructive",
+        })
+      } else if (axios.isAxiosError(error) && error.response?.status === 404) {
+        toast({
+          title: "Không tìm thấy điểm đến",
+          description: "Điểm đến này có thể đã bị xóa.",
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Lỗi xóa điểm đến",
+          description: "Không thể xóa điểm đến. Vui lòng thử lại.",
+          variant: "destructive",
+        })
+      }
+    }
   }
 
   // <-- THÊM FUNCTION XÓA NGÀY VỚI API -->
@@ -561,7 +1004,7 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
 
     // Lấy token từ cookie
     const token = Cookies.get("token")
-    
+
     // Kiểm tra token
     if (!token || token === "null" || token === "undefined") {
       toast({
@@ -586,18 +1029,29 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
 
       // Xử lý response từ API
       console.log("Response từ API xóa ngày:", response.data)
-      
-      // Cập nhật local state - xóa ngày khỏi danh sách
+
+      // Cập nhật local state - xóa ngày khỏi danh sách và refresh POIs
       const updatedDays = days.filter((day) => day.id !== dayId)
-      updateDaysList(updatedDays)
-      
+      const updatedPois = await fetchPoisFromAPI()
+      const daysWithPois = updatedDays.map((day: any) => ({
+        ...day,
+        pois: updatedPois
+          .filter((poi: any) => String(poi.lich_trinh_ngay_id) === String(day.id))
+          .sort((a: any, b: any) => a.gioBatDau.localeCompare(b.gioBatDau))
+          .map((poi: any) => {
+            const { lich_trinh_ngay_id, ...poiWithoutDayId } = poi
+            return poiWithoutDayId
+          }),
+      }))
+      updateDaysList(daysWithPois)
+
       toast({
         title: "Đã xóa ngày",
         description: "Ngày đã được xóa khỏi lịch trình thành công",
       })
     } catch (error) {
       console.error("Lỗi khi xóa ngày:", error)
-      
+
       // Xử lý lỗi 401
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         toast({
@@ -632,7 +1086,7 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
   const handleEditDay = async (dayData: any) => {
     // Lấy token từ cookie
     const token = Cookies.get("token")
-    
+
     // Kiểm tra token
     if (!token || token === "null" || token === "undefined") {
       toast({
@@ -679,38 +1133,60 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
       // Xử lý response từ API
       if (response.data && response.data.lich_trinh_ngay) {
         console.log("Response từ API:", response.data)
-        
-        // Cập nhật local state với dữ liệu từ API
-        const updatedDays = days.map((day) => 
-          day.id === editingDay.id 
-            ? { 
-                ...day, 
-                ngay: response.data.lich_trinh_ngay.ngay || dayData.ngay,
-                tieuDe: response.data.lich_trinh_ngay.tieu_de || dayData.tieuDe,
-                ghiChu: response.data.lich_trinh_ngay.ghi_chu || dayData.ghiChu
-              }
+
+        // Cập nhật local state với dữ liệu từ API và refresh POIs
+        const updatedDays = days.map((day) =>
+          day.id === editingDay.id
+            ? {
+              ...day,
+              ngay: response.data.lich_trinh_ngay.ngay || dayData.ngay,
+              tieuDe: response.data.lich_trinh_ngay.tieu_de || dayData.tieuDe,
+              ghiChu: response.data.lich_trinh_ngay.ghi_chu || dayData.ghiChu
+            }
             : day
         )
-        
-        // Sắp xếp lại và đánh số thứ tự
-        updateDaysList(updatedDays)
+
+        // Refresh POIs và sắp xếp lại
+        const updatedPois = await fetchPoisFromAPI()
+        const daysWithPois = updatedDays.map((day: any) => ({
+          ...day,
+          pois: updatedPois
+            .filter((poi: any) => String(poi.lich_trinh_ngay_id) === String(day.id))
+            .sort((a: any, b: any) => a.gioBatDau.localeCompare(b.gioBatDau))
+            .map((poi: any) => {
+              const { lich_trinh_ngay_id, ...poiWithoutDayId } = poi
+              return poiWithoutDayId
+            }),
+        }))
+        updateDaysList(daysWithPois)
         setEditingDay(null)
-        
+
         toast({
           title: "Đã cập nhật ngày",
           description: "Thông tin ngày đã được cập nhật thành công",
         })
       } else {
-        // Fallback nếu không có response data
-        const updatedDays = days.map((day) => 
-          day.id === editingDay.id 
+        // Fallback nếu không có response data - vẫn refresh POIs
+        const updatedDays = days.map((day) =>
+          day.id === editingDay.id
             ? { ...day, ...dayData }
             : day
         )
-        
-        updateDaysList(updatedDays)
+
+        const updatedPois = await fetchPoisFromAPI()
+        const daysWithPois = updatedDays.map((day: any) => ({
+          ...day,
+          pois: updatedPois
+            .filter((poi: any) => String(poi.lich_trinh_ngay_id) === String(day.id))
+            .sort((a: any, b: any) => a.gioBatDau.localeCompare(b.gioBatDau))
+            .map((poi: any) => {
+              const { lich_trinh_ngay_id, ...poiWithoutDayId } = poi
+              return poiWithoutDayId
+            }),
+        }))
+        updateDaysList(daysWithPois)
         setEditingDay(null)
-        
+
         toast({
           title: "Đã cập nhật ngày",
           description: "Thông tin ngày đã được cập nhật thành công",
@@ -718,7 +1194,7 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
       }
     } catch (error) {
       console.error("Lỗi khi cập nhật ngày:", error)
-      
+
       // Xử lý lỗi 401
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         toast({
@@ -775,137 +1251,147 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
       {/* ... (phần timeline không đổi) ... */}
       {!isLoadingDays && (
         <div className="space-y-6">
-        <Reorder.Group axis="y" values={days} onReorder={handleReorderDays}>
-          {days.map((day, dayIndex) => (
-            <Reorder.Item key={day.id} value={day}>
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: dayIndex * 0.1 }}
-              >
-                <Card className="border-l-4 border-l-primary">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <GripVertical className="h-5 w-5 text-muted-foreground cursor-grab" />
-                        <div>
-                          <CardTitle className="font-[family-name:var(--font-space-grotesk)]">{day.tieuDe}</CardTitle>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground">
-                              {(day as any).formattedDate || new Date(day.ngay).toLocaleDateString("vi-VN", {
-                                weekday: "long",
-                                year: "numeric",
-                                month: "long",
-                                day: "numeric",
-                              })}
-                            </span>
+          <Reorder.Group axis="y" values={days} onReorder={handleReorderDays}>
+            {days.map((day, dayIndex) => (
+              <Reorder.Item key={day.id} value={day}>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: dayIndex * 0.1 }}
+                >
+                  <Card className="border-l-4 border-l-primary">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <GripVertical className="h-5 w-5 text-muted-foreground cursor-grab" />
+                          <div>
+                            <CardTitle className="font-[family-name:var(--font-space-grotesk)]">{day.tieuDe}</CardTitle>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Calendar className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm text-muted-foreground">
+                                {(day as any).formattedDate || new Date(day.ngay).toLocaleDateString("vi-VN", {
+                                  weekday: "long",
+                                  year: "numeric",
+                                  month: "long",
+                                  day: "numeric",
+                                })}
+                              </span>
+                            </div>
+                            {day.ghiChu && (
+                              <p className="text-sm text-muted-foreground mt-1 font-[family-name:var(--font-dm-sans)]">
+                                {day.ghiChu}
+                              </p>
+                            )}
                           </div>
-                          {day.ghiChu && (
-                            <p className="text-sm text-muted-foreground mt-1 font-[family-name:var(--font-dm-sans)]">
-                              {day.ghiChu}
-                            </p>
-                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {/* CHỈNH SỬA */}
+                          <Button variant="outline" size="sm" onClick={() => setEditingDay(day)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowAddPoiModal(day.id)}
+                            className="bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"
+                          >
+                            <Plus className="h-4 w-4 mr-1" />
+                            Thêm Điểm
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteDay(day.id)}
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {/* CHỈNH SỬA */}
-                        <Button variant="outline" size="sm" onClick={() => setEditingDay(day)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowAddPoiModal(day.id)}
-                          className="bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"
-                        >
-                          <Plus className="h-4 w-4 mr-1" />
-                          Thêm Điểm
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteDay(day.id)}
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {day.pois.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p>Chưa có điểm đến nào</p>
-                        <Button variant="ghost" size="sm" onClick={() => setShowAddPoiModal(day.id)} className="mt-2">
-                          Thêm điểm đến đầu tiên
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {day.pois.map((poi, poiIndex) => (
-                          <div key={poi.id} className="flex items-start gap-4 p-4 bg-muted/30 rounded-lg">
-                            <div className="flex flex-col items-center">
-                              <div className="w-3 h-3 bg-primary rounded-full" />
-                              {poiIndex < day.pois.length - 1 && <div className="w-0.5 h-8 bg-border mt-2" />}
-                            </div>
+                    </CardHeader>
+                    <CardContent>
+                      {day.pois.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p>Chưa có điểm đến nào</p>
+                          {/* <Button variant="ghost" size="sm" onClick={() => setShowAddPoiModal(day.id)} className="mt-2">
+                            Thêm điểm đến đầu tiên
+                          </Button> */}
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {day.pois.map((poi, poiIndex) => (
+                            <div key={poi.id} className="flex items-start gap-4 p-4 bg-muted/30 rounded-lg">
+                              <div className="flex flex-col items-center">
+                                <div className="w-3 h-3 bg-primary rounded-full" />
+                                {poiIndex < day.pois.length - 1 && <div className="w-0.5 h-8 bg-border mt-2" />}
+                              </div>
 
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <h4 className="font-semibold text-foreground">{poi.tenDiaDiem}</h4>
-                                    <Badge
-                                      className={`text-xs ${getPoiTypeLabel(poi.loaiDiaDiem).color}`}
-                                      variant="secondary"
-                                    >
-                                      {getPoiTypeLabel(poi.loaiDiaDiem).label}
-                                    </Badge>
-                                  </div>
-
-                                  <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
-                                    <div className="flex items-center gap-1">
-                                      <Clock className="h-4 w-4" />
-                                      <span>
-                                        {poi.gioBatDau} - {poi.gioKetThuc}
-                                      </span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <h4 className="font-semibold text-foreground">{poi.tenDiaDiem}</h4>
+                                      <Badge
+                                        className={`text-xs ${getPoiTypeLabel(poi.loaiDiaDiem).color}`}
+                                        variant="secondary"
+                                      >
+                                        {getPoiTypeLabel(poi.loaiDiaDiem).label}
+                                      </Badge>
                                     </div>
-                                    {poi.thoiGianDiChuyen > 0 && (
+
+                                    <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
+                                      <div className="flex items-center gap-1">
+                                        <Clock className="h-4 w-4" />
+                                        <span>
+                                          {poi.gioBatDau} - {poi.gioKetThuc}
+                                        </span>
+                                      </div>
+                                      {/* {poi.thoiGianDiChuyen > 0 && (
                                       <div className="flex items-center gap-1 text-orange-600">
                                         <AlertCircle className="h-4 w-4" />
                                         <span>{poi.thoiGianDiChuyen} phút di chuyển</span>
                                       </div>
+                                    )} */}
+                                    </div>
+
+                                    {poi.ghiChu && (
+                                      <p className="text-sm text-muted-foreground font-[family-name:var(--font-dm-sans)]">
+                                        {poi.ghiChu}
+                                      </p>
                                     )}
                                   </div>
+                                   {/* CHỈNH SỬA */}
+                                   <Button
+                                     variant="ghost"
+                                     size="icon"
+                                     className="text-muted-foreground hover:text-primary"
+                                     onClick={() => setEditingPoi({ poi, dayId: day.id })}
+                                   >
+                                     <Pencil className="h-4 w-4" />
+                                   </Button>
+                                  {/* Xóa điểm */}
 
-                                  {poi.ghiChu && (
-                                    <p className="text-sm text-muted-foreground font-[family-name:var(--font-dm-sans)]">
-                                      {poi.ghiChu}
-                                    </p>
-                                  )}
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleDeletePoi(day.id, poi.id)}
+                                    className="text-muted-foreground hover:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
                                 </div>
-
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleDeletePoi(day.id, poi.id)}
-                                  className="text-muted-foreground hover:text-destructive"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </Reorder.Item>
-          ))}
-        </Reorder.Group>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              </Reorder.Item>
+            ))}
+          </Reorder.Group>
         </div>
       )}
 
@@ -929,16 +1415,16 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
         <AddDayModal
           onClose={() => setShowAddDayModal(false)}
           onSubmit={handleAddDay}
-          // isLoading={isAddingDay} // <-- Dòng này gây lỗi nên tạm thời xóa
+        // isLoading={isAddingDay} // <-- Dòng này gây lỗi nên tạm thời xóa
         />
       )}
 
       {showAddPoiModal && (
-        <AddPoiModal 
-          dayId={showAddPoiModal} 
+        <AddPoiModal
+          dayId={showAddPoiModal}
           tripId={tripId}
-          onClose={() => setShowAddPoiModal(null)} 
-          onSubmit={handleAddPoi} 
+          onClose={() => setShowAddPoiModal(null)}
+          onSubmit={handleAddPoi}
         />
       )}
 
@@ -947,6 +1433,16 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
           day={editingDay}
           onClose={() => setEditingDay(null)}
           onSubmit={handleEditDay}
+        />
+      )}
+
+      {editingPoi && (
+        <EditPoiModal
+          poi={editingPoi.poi}
+          dayId={editingPoi.dayId}
+          tripId={tripId}
+          onClose={() => setEditingPoi(null)}
+          onSubmit={handleEditPoi}
         />
       )}
     </div>

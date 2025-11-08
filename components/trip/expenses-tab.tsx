@@ -181,9 +181,11 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
               <DialogHeader>
                 <DialogTitle>Cập nhật ngân sách chuyến đi</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4 pt-4">
-                <div>
-                  <Label htmlFor="budget">Tổng tiền hiện có (VNĐ)</Label>
+              <div className="space-y-3 pt-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="budget" className="text-sm font-medium">
+                    Tổng tiền hiện có (VNĐ)
+                  </Label>
                   <Input
                     id="budget"
                     type="text"
@@ -194,17 +196,28 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
                       setTempBudget(value ? Number.parseInt(value).toLocaleString("vi-VN") : "")
                     }}
                   />
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Ngân sách hiện tại: {totalBudget.toLocaleString("vi-VN")} VNĐ
-                  </p>
+                  {/* <p className="text-xs text-muted-foreground">
+                    Ngân sách hiện tại:{" "}
+                    <span className="font-medium text-foreground">
+                      {totalBudget.toLocaleString("vi-VN")} VNĐ
+                    </span>
+                  </p> */}
                 </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setShowBudgetModal(false)}>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    className="px-4 py-1.5 text-sm"
+                    onClick={() => setShowBudgetModal(false)}
+                  >
                     Hủy
                   </Button>
-                  <Button onClick={handleUpdateBudget}>Cập nhật</Button>
+                  <Button className="px-4 py-1.5 text-sm" onClick={handleUpdateBudget}>
+                    Cập nhật
+                  </Button>
                 </div>
               </div>
+
             </DialogContent>
           </Dialog>
           <Button onClick={() => setShowAddModal(true)} className="bg-primary hover:bg-primary/90">
