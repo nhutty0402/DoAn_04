@@ -51,7 +51,7 @@ export function FriendsModal({ isOpen, onClose }: FriendsModalProps) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("friends")
   const [searchKeyword, setSearchKeyword] = useState("")
-  const [searchResult, setSearchResult] = useState<SearchResult | null>(null)
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [friends, setFriends] = useState<Friend[]>([])
   const [friendRequests, setFriendRequests] = useState<Friend[]>([])
   const [sentRequests, setSentRequests] = useState<{
@@ -291,16 +291,21 @@ export function FriendsModal({ isOpen, onClose }: FriendsModalProps) {
   // Hàm tìm kiếm thực tế
   const performSearch = useCallback(async (keyword: string) => {
     if (!keyword.trim()) {
-      setSearchResult(null)
+      setSearchResults([])
       return
     }
 
     setLoading(true)
 
     try {
+      // ✅ Kiểm tra token đúng cách
       const token = Cookies.get("token")
-      if (!token) {
+      console.log("Token từ cookie:", token)
+
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("Không có token → chuyển về /login")
         toast.error("Vui lòng đăng nhập lại")
+        router.replace("/login")
         return
       }
 
@@ -317,49 +322,65 @@ export function FriendsModal({ isOpen, onClose }: FriendsModalProps) {
 
       console.log("Search API Response:", response.data)
 
+      // Lấy tất cả kết quả từ response
+      let results: SearchResult[] = []
+
       // Kiểm tra cấu trúc response từ API
-      if (response.data && response.data.danh_sach && response.data.danh_sach.length > 0) {
-        // Lấy kết quả đầu tiên từ danh_sach
-        const user = response.data.danh_sach[0]
-        setSearchResult({
+      if (response.data && response.data.danh_sach && Array.isArray(response.data.danh_sach)) {
+        // API trả về { danh_sach: [...] }
+        results = response.data.danh_sach.map((user: any) => ({
           nguoi_dung_id: user.nguoi_dung_id,
           ho_ten: user.ho_ten,
           email: user.email,
           avatar_url: user.avatar_url || "/placeholder-user.jpg"
-        })
-        console.log("Found user:", user)
-      } else if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+        }))
+        console.log(`✅ Tìm thấy ${results.length} kết quả từ danh_sach:`, results)
+      } else if (response.data && Array.isArray(response.data)) {
         // Fallback: nếu API trả về array trực tiếp
-        const user = response.data[0]
-        setSearchResult({
+        results = response.data.map((user: any) => ({
           nguoi_dung_id: user.nguoi_dung_id,
           ho_ten: user.ho_ten,
           email: user.email,
           avatar_url: user.avatar_url || "/placeholder-user.jpg"
-        })
-        console.log("Found user (fallback):", user)
+        }))
+        console.log(`✅ Tìm thấy ${results.length} kết quả từ array trực tiếp:`, results)
+      } else if (response.data?.data && Array.isArray(response.data.data)) {
+        // Fallback: nếu API trả về { data: [...] }
+        results = response.data.data.map((user: any) => ({
+          nguoi_dung_id: user.nguoi_dung_id,
+          ho_ten: user.ho_ten,
+          email: user.email,
+          avatar_url: user.avatar_url || "/placeholder-user.jpg"
+        }))
+        console.log(`✅ Tìm thấy ${results.length} kết quả từ data:`, results)
       } else {
-        setSearchResult(null)
-        console.log("No users found in response")
+        console.log("⚠️ Không tìm thấy kết quả nào trong response")
       }
+
+      setSearchResults(results)
     } catch (error: any) {
       console.error("Lỗi khi tìm kiếm người dùng:", error)
 
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 401) {
           toast.error("Phiên đăng nhập đã hết hạn")
+          router.replace("/login")
         } else if (error.response?.status === 404) {
-          setSearchResult(null)
+          setSearchResults([])
+          console.log("Không tìm thấy người dùng nào")
         } else {
           console.error(`Lỗi: ${error.response?.data?.message || error.message}`)
+          toast.error(error.response?.data?.message || "Có lỗi xảy ra khi tìm kiếm")
         }
       } else {
         console.error("Có lỗi xảy ra khi tìm kiếm")
+        toast.error("Có lỗi xảy ra khi tìm kiếm")
       }
+      setSearchResults([])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [router])
 
   // Debounced search - tự động tìm kiếm sau 500ms khi người dùng ngừng gõ
   const handleSearchInputChange = (value: string) => {
@@ -373,7 +394,7 @@ export function FriendsModal({ isOpen, onClose }: FriendsModalProps) {
 
     // Nếu input rỗng, clear kết quả ngay lập tức
     if (!value.trim()) {
-      setSearchResult(null)
+      setSearchResults([])
       setLoading(false)
       return
     }
@@ -454,11 +475,16 @@ error.message ||
  }
   
   // Gửi lời mời kết bạn
-  const handleSendFriendRequest = async (userId: string) => {
+  const handleSendFriendRequest = useCallback(async (userId: string) => {
     try {
+      // ✅ Kiểm tra token đúng cách
       const token = Cookies.get("token")
-      if (!token) {
+      console.log("Token từ cookie:", token)
+
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("Không có token → chuyển về /login")
         toast.error("Vui lòng đăng nhập lại")
+        router.replace("/login")
         return
       }
 
@@ -486,12 +512,13 @@ error.message ||
       // Backend trả về 201 cho success
       if (response.status === 201) {
         toast.success("Đã gửi lời mời kết bạn")
-        setSearchResult(null)
-        setSearchKeyword("")
+        // Refresh danh sách lời mời đã gửi
+        fetchSentRequests()
+        // Không xóa kết quả để người dùng có thể gửi tiếp cho người khác
       } else if (response.data?.message === 'Đã có quan hệ trước đó') {
         toast.info(`Đã có quan hệ trước đó (${response.data.trang_thai})`)
-        setSearchResult(null)
-        setSearchKeyword("")
+        // Refresh danh sách lời mời đã gửi
+        fetchSentRequests()
       }
     } catch (error: any) {
       console.error("Lỗi khi gửi lời mời kết bạn:", error)
@@ -499,6 +526,7 @@ error.message ||
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 401) {
           toast.error("Phiên đăng nhập đã hết hạn")
+          router.replace("/login")
         } else if (error.response?.status === 400) {
           const message = error.response.data.message || "Dữ liệu không hợp lệ"
           if (message.includes("Thiếu ban_be_id")) {
@@ -511,8 +539,8 @@ error.message ||
         } else if (error.response?.status === 201) {
           // Backend trả về 201 cho success case
           toast.success("Đã gửi lời mời kết bạn")
-          setSearchResult(null)
-          setSearchKeyword("")
+          // Refresh danh sách lời mời đã gửi
+          fetchSentRequests()
         } else {
           toast.error(`Lỗi: ${error.response?.data?.message || error.message}`)
         }
@@ -520,7 +548,7 @@ error.message ||
         toast.error("Có lỗi xảy ra khi gửi lời mời")
       }
     }
-  }
+  }, [router, fetchSentRequests, currentUserId])
 
   // Chấp nhận lời mời kết bạn
   const handleAcceptFriendRequest = async (requestId: string | undefined) => {
@@ -822,18 +850,83 @@ error.message ||
                     {loading ? "Đang tìm..." : ""}
                   </Button>
                 </div>
-                {searchKeyword && !loading && !searchResult && (
-                  <p className="text-sm text-muted-foreground">💡 Tìm kiếm....</p>
+                {searchKeyword && !loading && searchResults.length === 0 && (
+                  <p className="text-sm text-muted-foreground">💡 Nhập từ khóa để tìm kiếm...</p>
                 )}
                 {loading && (
                   <p className="text-sm text-muted-foreground">🔍 Đang tìm kiếm...</p>
                 )}
+                {!loading && searchKeyword && searchResults.length === 0 && (
+                  <p className="text-sm text-muted-foreground">❌ Không tìm thấy kết quả nào</p>
+                )}
               </div>
+
+              {/* Kết quả tìm kiếm */}
+              {searchResults.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Kết quả tìm kiếm ({searchResults.length})</p>
+                  <div className="max-h-64 overflow-y-auto space-y-2">
+                    {searchResults.map((result) => {
+                      const hasSentRequest = sentRequests.some(
+                        (req) =>
+                          req.nguoi_nhan_id === result.nguoi_dung_id ||
+                          req.ho_ten === result.ho_ten ||
+                          req.email === result.email
+                      )
+                      const isFriend = friends.some(
+                        (f) => f.nguoi_dung_id === result.nguoi_dung_id
+                      )
+
+                      return (
+                        <div
+                          key={result.nguoi_dung_id}
+                          className="flex items-center justify-between p-3 border rounded-lg"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <Avatar className="h-10 w-10">
+                              <AvatarImage
+                                src={result.avatar_url}
+                                alt={result.ho_ten}
+                              />
+                              <AvatarFallback>
+                                {result.ho_ten.slice(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium">{result.ho_ten}</p>
+                              <p className="text-sm text-muted-foreground">{result.email}</p>
+                              <p className="text-xs text-muted-foreground">
+                                ID: {result.nguoi_dung_id}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            {isFriend ? (
+                              <Badge variant="secondary">✅ Bạn bè</Badge>
+                            ) : hasSentRequest ? (
+                              <Badge variant="outline">✅ Đã gửi lời mời</Badge>
+                            ) : (
+                              <Button
+                                onClick={() => handleSendFriendRequest(result.nguoi_dung_id)}
+                                className="bg-primary hover:bg-primary/90"
+                                size="sm"
+                              >
+                                <UserPlus className="h-4 w-4 mr-1" />
+                                Gửi lời mời
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Danh sách lời mời đã gửi */}
               {sentRequests.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-sm font-medium">Lời mời đã gửi</p>
+                  <p className="text-sm font-medium">Lời mời đã gửi ({sentRequests.length})</p>
                   <div className="max-h-64 overflow-y-auto space-y-2">
                     {sentRequests.map((req) => (
                       <div
@@ -859,64 +952,18 @@ error.message ||
                         </div>
                         <div className="flex items-center space-x-2">
                           <Badge variant="outline">Đã gửi</Badge>
-                       <Button
-variant="outline"
-size="sm"
-// Gọi hàm mới và truyền ID mối quan hệ (ban_be_id)
-onClick={() => handleCancelSentRequest(req.ban_be_id)}
-className="text-destructive hover:text-destructive"
->
-<X className="h-4 w-4 mr-1" />
-Hủy lời mời
-</Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCancelSentRequest(req.ban_be_id)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <X className="h-4 w-4 mr-1" />
+                            Hủy lời mời
+                          </Button>
                         </div>
                       </div>
                     ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Kết quả tìm kiếm */}
-              {searchResult && (
-                <div className="border rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <Avatar className="h-12 w-12">
-                        <AvatarImage
-                          src={searchResult.avatar_url}
-                          alt={searchResult.ho_ten}
-                        />
-                        <AvatarFallback>
-                          {searchResult.ho_ten.slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium text-lg">{searchResult.ho_ten}</p>
-                        <p className="text-muted-foreground">{searchResult.email}</p>
-                        <p className="text-sm text-muted-foreground">
-                          ID: {searchResult.nguoi_dung_id}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {sentRequests.some(
-                        (req) =>
-                          req.ho_ten === searchResult.ho_ten ||
-                          req.email === searchResult.email
-                      ) ? (
-                        <Badge variant="secondary">✅ Đã gửi lời mời</Badge>
-                      ) : (
-                        <Button
-                          onClick={() =>
-                            handleSendFriendRequest(searchResult.nguoi_dung_id)
-                          }
-                          className="bg-primary hover:bg-primary/90"
-                        >
-                          <UserPlus className="h-4 w-4 mr-2" />
-                          Gửi lời mời kết bạn
-                        </Button>
-                      )}
-                    </div>
                   </div>
                 </div>
               )}
