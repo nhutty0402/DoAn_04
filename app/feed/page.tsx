@@ -1,118 +1,305 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
+import axios from "axios"
+import Cookies from "js-cookie"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, MapPin, Calendar, Users, Eye, Download, Star } from "lucide-react"
+import { Search, MapPin, Calendar, Users, Eye, Download, Star, Loader2 } from "lucide-react"
 import { motion } from "framer-motion"
 import Link from "next/link"
+import { toast } from "sonner"
 
-// Mock data for public shared trips
-const publicTrips = [
-  {
-    id: "1",
-    title: "Khám Phá Đà Nẵng - Hội An",
-    description: "Chuyến đi 5 ngày 4 đêm khám phá vẻ đẹp của miền Trung Việt Nam",
-    destination: "Đà Nẵng, Việt Nam",
-    duration: "5 ngày 4 đêm",
-    startDate: "2024-03-15",
-    endDate: "2024-03-19",
-    memberCount: 4,
-    viewCount: 1250,
-    rating: 4.8,
-    tags: ["Biển", "Văn hóa", "Ẩm thực"],
-    owner: {
-      name: "Nguyễn Văn A",
-      avatar: "/vietnamese-man.jpg",
-    },
-    coverImage: "/bana-hills-golden-bridge.jpg",
-    highlights: ["Cầu Vàng Ba Na Hills", "Phố cổ Hội An", "Bãi biển Mỹ Khê"],
-    budget: "2,500,000 VNĐ",
-    isVerified: true,
-  },
-  {
-    id: "2",
-    title: "Sài Gòn - Mũi Né Adventure",
-    description: "Trải nghiệm từ thành phố sôi động đến bãi biển thơ mộng",
-    destination: "TP.HCM - Phan Thiết",
-    duration: "4 ngày 3 đêm",
-    startDate: "2024-04-01",
-    endDate: "2024-04-04",
-    memberCount: 6,
-    viewCount: 890,
-    rating: 4.6,
-    tags: ["Thành phố", "Biển", "Phiêu lưu"],
-    owner: {
-      name: "Trần Thị B",
-      avatar: "/vietnamese-woman.png",
-    },
-    coverImage: "/mui-ne-sand-dunes.jpg",
-    highlights: ["Đồi cát Mũi Né", "Chợ Bến Thành", "Suối Tiên"],
-    budget: "3,200,000 VNĐ",
-    isVerified: false,
-  },
-  {
-    id: "3",
-    title: "Hà Nội - Sapa Trekking",
-    description: "Chinh phục đỉnh Fansipan và khám phá văn hóa dân tộc",
-    destination: "Hà Nội - Sapa",
-    duration: "6 ngày 5 đêm",
-    startDate: "2024-05-10",
-    endDate: "2024-05-15",
-    memberCount: 8,
-    viewCount: 2100,
-    rating: 4.9,
-    tags: ["Núi", "Trekking", "Văn hóa"],
-    owner: {
-      name: "Lê Văn C",
-      avatar: "/vietnamese-hiker.jpg",
-    },
-    coverImage: "/sapa-rice-terraces.jpg",
-    highlights: ["Đỉnh Fansipan", "Ruộng bậc thang", "Bản Cát Cát"],
-    budget: "4,500,000 VNĐ",
-    isVerified: true,
-  },
-]
+// Interface cho trip từ API (cho phép null/undefined)
+interface TripFromAPI {
+  chuyen_di_id: number
+  ten_chuyen_di: string | null
+  mo_ta: string | null
+  url_avt: string | null
+  dia_diem_xuat_phat: string | null
+  ngay_bat_dau: string | null
+  ngay_ket_thuc: string | null
+  chu_so_huu_id: number
+  tien_te: string | null
+  trang_thai: string | null
+  tong_ngan_sach: string | number | null
+  tao_luc: string | null
+  cong_khai: number | null
+  chu_so_huu_ten: string | null
+  chu_so_huu_avatar: string | null
+  tong_thanh_vien: number | null
+}
+
+// Interface cho trip hiển thị
+interface DisplayTrip {
+  id: string
+  title: string
+  description: string
+  destination: string
+  duration: string
+  startDate: string
+  endDate: string
+  memberCount: number
+  viewCount: number
+  rating: number
+  tags: string[]
+  owner: {
+    name: string
+    avatar: string
+  }
+  coverImage: string
+  highlights: string[]
+  budget: string
+  isVerified: boolean
+}
 
 export default function PublicFeedPage() {
+  const router = useRouter()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedFilter, setSelectedFilter] = useState("all")
-  const [filteredTrips, setFilteredTrips] = useState(publicTrips)
+  const [trips, setTrips] = useState<DisplayTrip[]>([])
+  const [filteredTrips, setFilteredTrips] = useState<DisplayTrip[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
+  // Tính toán số ngày từ ngày bắt đầu và kết thúc
+  const calculateDuration = (startDate: string, endDate: string): string => {
+    try {
+      const start = new Date(startDate)
+      const end = new Date(endDate)
+      
+      // Kiểm tra date hợp lệ
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return "Chưa xác định"
+      }
+      
+      // Đảm bảo tính toán đúng với timezone
+      start.setHours(0, 0, 0, 0)
+      end.setHours(0, 0, 0, 0)
+      
+      const diffTime = end.getTime() - start.getTime()
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1 // +1 để tính cả ngày cuối
+      
+      if (diffDays <= 0) {
+        return "1 ngày"
+      }
+      
+      const nights = diffDays - 1
+      if (nights === 0) {
+        return "1 ngày"
+      }
+      
+      return `${diffDays} ngày ${nights} đêm`
+    } catch (error) {
+      console.error("Lỗi khi tính duration:", error)
+      return "Chưa xác định"
+    }
+  }
+
+  // Format ngân sách
+  const formatBudget = (amount: string | number, currency: string): string => {
+    const numAmount = typeof amount === "string" ? parseFloat(amount) : amount
+    if (isNaN(numAmount)) return "Chưa cập nhật"
+    const formatted = new Intl.NumberFormat("vi-VN").format(numAmount)
+    return `${formatted} ${currency}`
+  }
+
+  // Map data từ API sang format hiển thị
+  const mapTripFromAPI = (trip: TripFromAPI): DisplayTrip => {
+    // ✅ Xử lý an toàn với null/undefined
+    const moTa = trip.mo_ta || ""
+    const ngayBatDau = trip.ngay_bat_dau || new Date().toISOString().split("T")[0]
+    const ngayKetThuc = trip.ngay_ket_thuc || ngayBatDau
+    
+    const duration = calculateDuration(ngayBatDau, ngayKetThuc)
+    const budget = formatBudget(trip.tong_ngan_sach || 0, trip.tien_te || "VNĐ")
+    
+    // ✅ Tạo tags từ mo_ta (kiểm tra null/undefined trước)
+    const tags: string[] = []
+    if (moTa) {
+      const lowerMoTa = moTa.toLowerCase()
+      if (lowerMoTa.includes("biển") || lowerMoTa.includes("beach")) {
+        tags.push("Biển")
+      }
+      if (lowerMoTa.includes("núi") || lowerMoTa.includes("mountain")) {
+        tags.push("Núi")
+      }
+      if (lowerMoTa.includes("văn hóa") || lowerMoTa.includes("culture")) {
+        tags.push("Văn hóa")
+      }
+      if (lowerMoTa.includes("thành phố") || lowerMoTa.includes("city")) {
+        tags.push("Thành phố")
+      }
+    }
+    if (tags.length === 0) {
+      tags.push("Du lịch")
+    }
+
+    // ✅ Tạo highlights từ mo_ta (kiểm tra null/undefined trước)
+    const highlights: string[] = []
+    if (moTa) {
+      const descriptionLines = moTa.split(".").filter((line) => line.trim().length > 0)
+      highlights.push(...descriptionLines.slice(0, 3).map((line) => line.trim()))
+    }
+    if (highlights.length === 0) {
+      highlights.push("Chuyến đi thú vị")
+    }
+
+    return {
+      id: String(trip.chuyen_di_id),
+      title: trip.ten_chuyen_di || "Chuyến đi không có tên",
+      description: moTa || "Chưa có mô tả",
+      destination: trip.dia_diem_xuat_phat || "Chưa xác định",
+      duration,
+      startDate: ngayBatDau,
+      endDate: ngayKetThuc,
+      memberCount: trip.tong_thanh_vien || 1,
+      viewCount: 0, // API không trả về, có thể thêm sau
+      rating: 4.5, // API không trả về, có thể thêm sau
+      tags,
+      owner: {
+        name: trip.chu_so_huu_ten || "Người dùng",
+        avatar: trip.chu_so_huu_avatar || "/placeholder-user.jpg",
+      },
+      coverImage: trip.url_avt || "/placeholder.svg",
+      highlights,
+      budget,
+      isVerified: trip.cong_khai === 1,
+    }
+  }
+
+  // Fetch trips từ API
+  const fetchTrips = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      // ✅ Kiểm tra token theo yêu cầu
+      const token = Cookies.get("token")
+      console.log("Token từ cookie:", token)
+
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("Không có token → chuyển về /login")
+        router.replace("/login")
+        return
+      }
+
+      // Gọi API lấy danh sách chuyến đi công khai
+      const response = await axios.get(
+        "https://travel-planner-imdw.onrender.com/api/chuyendi/trang-thai/cong-khai",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      console.log("✅ API Response:", response.data)
+
+      // Kiểm tra cấu trúc response
+      const data = response.data?.danh_sach || response.data?.data || []
+      
+      if (!Array.isArray(data)) {
+        console.error("❌ Dữ liệu không hợp lệ từ API:", response.data)
+        throw new Error("Dữ liệu không hợp lệ từ API")
+      }
+
+      console.log(`✅ Nhận được ${data.length} chuyến đi từ API`)
+
+      // Map data từ API sang format hiển thị (với error handling)
+      const mappedTrips = data
+        .map((trip: any, index: number) => {
+          try {
+            return mapTripFromAPI(trip)
+          } catch (err) {
+            console.error(`❌ Lỗi khi map trip ${index}:`, err, trip)
+            return null
+          }
+        })
+        .filter((trip: DisplayTrip | null): trip is DisplayTrip => trip !== null)
+      
+      setTrips(mappedTrips)
+      setFilteredTrips(mappedTrips)
+      console.log(`✅ Đã tải và map thành công ${mappedTrips.length} chuyến đi công khai`)
+    } catch (error: any) {
+      console.error("❌ Lỗi khi tải danh sách chuyến đi:", error)
+      setError("Không thể tải danh sách chuyến đi. Vui lòng thử lại sau.")
+      
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          toast.error("Phiên đăng nhập đã hết hạn")
+          router.replace("/login")
+        } else {
+          toast.error(error.response?.data?.message || "Có lỗi xảy ra khi tải danh sách chuyến đi")
+        }
+      } else {
+        toast.error("Có lỗi xảy ra khi tải danh sách chuyến đi")
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [router])
+
+  // Fetch trips khi component mount
   useEffect(() => {
-    let filtered = publicTrips
+    fetchTrips()
+  }, [fetchTrips])
+
+  // Filter trips khi searchTerm hoặc selectedFilter thay đổi
+  useEffect(() => {
+    let filtered = trips
 
     // Filter by search term
     if (searchTerm) {
-      filtered = filtered.filter(
-        (trip) =>
-          trip.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          trip.destination.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          trip.tags.some((tag) => tag.toLowerCase().includes(searchTerm.toLowerCase()))
-      )
+      const searchLower = searchTerm.toLowerCase()
+      filtered = filtered.filter((trip) => {
+        try {
+          return (
+            (trip.title || "").toLowerCase().includes(searchLower) ||
+            (trip.destination || "").toLowerCase().includes(searchLower) ||
+            trip.tags.some((tag) => (tag || "").toLowerCase().includes(searchLower)) ||
+            (trip.description || "").toLowerCase().includes(searchLower)
+          )
+        } catch (error) {
+          console.error("Lỗi khi filter trip:", error)
+          return false
+        }
+      })
     }
 
     // Filter by category
     if (selectedFilter !== "all") {
       filtered = filtered.filter((trip) => {
-        switch (selectedFilter) {
-          case "popular":
-            return trip.viewCount > 1000
-          case "verified":
-            return trip.isVerified
-          case "recent":
-            return new Date(trip.startDate) > new Date("2024-04-01")
-          default:
-            return true
+        try {
+          switch (selectedFilter) {
+            case "popular":
+              return trip.viewCount > 1000
+            case "verified":
+              return trip.isVerified
+            case "recent":
+              // Lọc các chuyến đi có ngày bắt đầu trong 30 ngày gần đây
+              if (!trip.startDate) return false
+              const thirtyDaysAgo = new Date()
+              thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+              const startDate = new Date(trip.startDate)
+              return !isNaN(startDate.getTime()) && startDate > thirtyDaysAgo
+            default:
+              return true
+          }
+        } catch (error) {
+          console.error("Lỗi khi filter trip by category:", error)
+          return false
         }
       })
     }
 
     setFilteredTrips(filtered)
-  }, [searchTerm, selectedFilter])
+  }, [searchTerm, selectedFilter, trips])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-50">
@@ -143,7 +330,7 @@ export default function PublicFeedPage() {
       <div
         className="relative text-white py-13 bg-cover bg-center bg-no-repeat"
         style={{
-          backgroundImage: "url('/gg.jpg')",
+          backgroundImage: "url('/gg1.jpg')",
         }}
       >
         <div className="absolute inset-0 bg-black/50" />
@@ -233,135 +420,158 @@ export default function PublicFeedPage() {
 
       {/* Trip Cards */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {filteredTrips.map((trip, index) => (
-            <motion.div
-              key={trip.id}
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: index * 0.1 }}
-            >
-              <Card className="overflow-hidden hover:shadow-2xl transition-all duration-300 border-0 shadow-xl rounded-2xl">
-                {/* Cover Image */}
-                <div className="relative h-56 overflow-hidden">
-                  <img
-                    src={trip.coverImage || "/placeholder.svg"}
-                    alt={trip.title}
-                    className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
-                  />
-                  <div className="absolute top-4 right-4 flex gap-2">
-                    {trip.isVerified && (
-                      <Badge className="bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg">
-                        <Star className="h-3 w-3 mr-1" />
-                        Đã xác thực
-                      </Badge>
-                    )}
-                    <Badge variant="secondary" className="bg-white/95 backdrop-blur-sm text-gray-800 font-medium">
-                      <Eye className="h-3 w-3 mr-1" />
-                      {trip.viewCount.toLocaleString()}
-                    </Badge>
-                  </div>
+        {/* Loading State */}
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-20">
+            <Loader2 className="h-12 w-12 animate-spin text-blue-600 mb-4" />
+            <p className="text-lg text-gray-600">Đang tải danh sách chuyến đi...</p>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && !loading && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-center py-20"
+          >
+            <div className="text-red-400 mb-6">
+              <Search className="h-20 w-20 mx-auto" />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-3">Có lỗi xảy ra</h3>
+            <p className="text-gray-600 text-lg mb-4">{error}</p>
+            <Button onClick={() => fetchTrips()} className="bg-blue-600 hover:bg-blue-700">
+              Thử lại
+            </Button>
+          </motion.div>
+        )}
+
+        {/* Trip Cards Grid */}
+        {!loading && !error && (
+  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+    {filteredTrips.map((trip, index) => (
+      <motion.div
+        key={trip.id}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.4, delay: index * 0.05 }}
+        className="group"
+      >
+        <Link href={`/feed/${trip.id}`} className="block h-full">
+          <Card className="h-full overflow-hidden rounded-2xl border-0 shadow-lg hover:shadow-2xl transition-all duration-300 bg-white group-hover:-translate-y-2">
+            {/* Cover Image - Tỉ lệ đẹp hơn */}
+            <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
+              <img
+                src={trip.coverImage || "/placeholder.svg"}
+                alt={trip.title}
+                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              
+              {/* Badges góc trên */}
+              <div className="absolute top-3 right-3 flex flex-col gap-2">
+                {trip.isVerified && (
+                  <Badge className="bg-emerald-500 text-white text-xs font-medium px-2 py-1 shadow-md">
+                    <Star className="h-3 w-3 mr-1" />
+                    Đã xác thực
+                  </Badge>
+                )}
+                <Badge className="bg-white/90 backdrop-blur text-gray-800 text-xs font-medium px-2 py-1">
+                  <Eye className="h-3 w-3 mr-1" />
+                  {trip.viewCount > 999 ? `${(trip.viewCount/1000).toFixed(1)}k` : trip.viewCount}
+                </Badge>
+              </div>
+
+              {/* Budget nổi bật góc dưới trái */}
+              <div className="absolute bottom-3 left-3">
+                <span className="bg-blue-600 text-white px-3 py-1.5 rounded-full text-sm font-bold shadow-lg">
+                  {trip.budget}
+                </span>
+              </div>
+            </div>
+
+            <CardContent className="p-4 space-y-3">
+              {/* Title - ngắn gọn hơn */}
+              <h3 className="font-bold text-lg text-gray-900 line-clamp-2 leading-tight">
+                {trip.title}
+              </h3>
+
+              {/* Destination + Duration - ngang hàng, gọn */}
+              <div className="flex items-center gap-4 text-sm text-gray-600">
+                <div className="flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4 text-blue-600" />
+                  <span className="font-medium">{trip.destination}</span>
                 </div>
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="h-4 w-4 text-blue-600" />
+                  <span>{trip.duration}</span>
+                </div>
+              </div>
 
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between mb-2">
-                    <CardTitle className="text-xl font-bold text-gray-900 line-clamp-2 pr-2">
-                      {trip.title}
-                    </CardTitle>
-                  </div>
-                  <p className="text-sm text-gray-600 line-clamp-2 mb-4">{trip.description}</p>
+              {/* Owner + Rating - nhỏ gọn */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={trip.owner.avatar} />
+                    <AvatarFallback className="text-xs">
+                      {trip.owner.name[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm font-medium text-gray-800">
+                    {trip.owner.name.split(" ").slice(-1)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Star className="h-4 w-4 text-yellow-500 fill-current" />
+                  <span className="text-sm font-bold text-gray-700">{trip.rating}</span>
+                </div>
+              </div>
 
-                  {/* Owner Info */}
-                  <div className="flex items-center gap-3 mb-4">
-                    <Avatar className="h-10 w-10 ring-2 ring-white shadow-md">
-                      <AvatarImage src={trip.owner.avatar} />
-                      <AvatarFallback className="bg-blue-100 text-blue-600 font-bold">
-                        {trip.owner.name[0]}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{trip.owner.name}</p>
-                      <div className="flex items-center gap-1">
-                        <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                        <span className="text-sm font-medium text-gray-700">{trip.rating}</span>
-                      </div>
-                    </div>
-                  </div>
+              {/* Tags - nhỏ, tối đa 3 */}
+              <div className="flex flex-wrap gap-1.5">
+                {trip.tags.slice(0, 3).map((tag) => (
+                  <Badge
+                    key={tag}
+                    variant="secondary"
+                    className="text-xs py-0.5 px-2 bg-blue-50 text-blue-700"
+                  >
+                    {tag}
+                  </Badge>
+                ))}
+                {trip.tags.length > 3 && (
+                  <span className="text-xs text-gray-500">+{trip.tags.length - 3}</span>
+                )}
+              </div>
 
-                  {/* Trip Details */}
-                  <div className="space-y-3 text-sm">
-                    <div className="flex items-center gap-3 text-gray-700">
-                      <MapPin className="h-5 w-5 text-blue-600" />
-                      <span className="font-medium">{trip.destination}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-gray-700">
-                      <Calendar className="h-5 w-5 text-blue-600" />
-                      <span>{trip.duration}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-gray-700">
-                      <Users className="h-5 w-5 text-blue-600" />
-                      <span>{trip.memberCount} thành viên</span>
-                    </div>
-                  </div>
-
-                  {/* Tags */}
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    {trip.tags.map((tag) => (
-                      <Badge
-                        key={tag}
-                        variant="secondary"
-                        className="text-xs bg-blue-50 text-blue-700 border border-blue-200"
-                      >
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                </CardHeader>
-
-                <CardContent className="pt-0">
-                  {/* Highlights */}
-                  <div className="mb-5">
-                    <p className="text-sm font-bold text-gray-900 mb-2">Điểm nổi bật:</p>
-                    <ul className="text-sm text-gray-600 space-y-1.5">
-                      {trip.highlights.slice(0, 3).map((highlight, idx) => (
-                        <li key={idx} className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 bg-blue-600 rounded-full" />
-                          <span>{highlight}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Budget */}
-                  <div className="flex items-center justify-between mb-5 px-1">
-                    <span className="text-sm font-medium text-gray-600">Ngân sách ước tính:</span>
-                    <span className="text-lg font-bold text-blue-600">{trip.budget}</span>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex gap-3">
-                    <Link href={`/feed/${trip.id}`} className="flex-1">
-                      <Button className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-xl shadow-lg">
-                        <Eye className="h-5 w-5 mr-2" />
-                        Xem Chi Tiết
-                      </Button>
-                    </Link>
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      className="border-2 border-blue-200 text-blue-700 hover:bg-blue-50 font-semibold rounded-xl"
-                    >
-                      <Download className="h-5 w-5" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
+              {/* Thành viên */}
+              <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-1.5 text-gray-600">
+                  <Users className="h-4 w-4 text-blue-600" />
+                  <span>{trip.memberCount} thành viên</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-blue-600 hover:bg-blue-50 -mr-2"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    // handle download
+                  }}
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      </motion.div>
+    ))}
+  </div>
+)}
 
         {/* No Results */}
-        {filteredTrips.length === 0 && (
+        {!loading && !error && filteredTrips.length === 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

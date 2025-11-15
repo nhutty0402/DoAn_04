@@ -15,7 +15,16 @@ interface ExpensesListProps {
 
 export function ExpensesList({ expenses, members, onUpdateExpense }: ExpensesListProps) {
   const getExpenseTypeLabel = (type: string) => {
-    const types = {
+    const types: Record<string, { label: string; color: string }> = {
+      "ăn uống": { label: "Ăn uống", color: "bg-green-100 text-green-800" },
+      "lưu trú": { label: "Lưu trú", color: "bg-blue-100 text-blue-800" },
+      "di chuyển": { label: "Di chuyển", color: "bg-yellow-100 text-yellow-800" },
+      "giải trí": { label: "Giải trí", color: "bg-purple-100 text-purple-800" },
+      "mua sắm": { label: "Mua sắm", color: "bg-pink-100 text-pink-800" },
+      "vé tham quan": { label: "Vé tham quan", color: "bg-indigo-100 text-indigo-800" },
+      "dịch vụ": { label: "Dịch vụ", color: "bg-cyan-100 text-cyan-800" },
+      "khác": { label: "Khác", color: "bg-gray-100 text-gray-800" },
+      // Legacy English types for backward compatibility
       food: { label: "Ăn uống", color: "bg-green-100 text-green-800" },
       accommodation: { label: "Lưu trú", color: "bg-blue-100 text-blue-800" },
       transport: { label: "Di chuyển", color: "bg-yellow-100 text-yellow-800" },
@@ -23,7 +32,7 @@ export function ExpensesList({ expenses, members, onUpdateExpense }: ExpensesLis
       shopping: { label: "Mua sắm", color: "bg-pink-100 text-pink-800" },
       other: { label: "Khác", color: "bg-gray-100 text-gray-800" },
     }
-    return types[type as keyof typeof types] || types.other
+    return types[type] || types["khác"] || types.other
   }
 
   const getSplitMethodLabel = (method: string) => {
@@ -102,10 +111,6 @@ export function ExpensesList({ expenses, members, onUpdateExpense }: ExpensesLis
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Chỉnh sửa
-                        </DropdownMenuItem>
                         <DropdownMenuItem className="text-destructive">
                           <Trash2 className="mr-2 h-4 w-4" />
                           Xóa

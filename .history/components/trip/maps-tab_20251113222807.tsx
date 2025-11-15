@@ -358,31 +358,29 @@ export function MapsTab({ tripId }: MapsTabProps) {
                 <p className="text-sm text-destructive">{forecastError}</p>
               )}
               {!forecastLoading && !forecastError && forecast?.du_bao && (
-                <div className="max-h-48 md:max-h-56 overflow-y-auto pr-2 forecast-scroll">
-                  <div className="space-y-2">
-                    {Object.entries(forecast.du_bao)
-                      .slice(0, 5)
-                      .map(([date, items]: [string, any[]], index) => {
-                        const first = items[0]
-                        return (
-                          <div key={date} className="flex items-center justify-between p-3 rounded-lg border bg-muted/50">
-                            <div className="flex items-center gap-3">
-                              {first?.icon ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={first.icon} alt={first.mo_ta || "forecast"} className="h-6 w-6 object-contain" />
-                              ) : (
-                                getWeatherIcon("sunny")
-                              )}
-                              <span className="font-medium">{new Date(date).toLocaleDateString("vi-VN", { weekday: 'short', day: 'numeric', month: 'short' })}</span>
-                            </div>
-                            <div className="text-sm font-medium">
-                              {first?.nhiet_do || "--"} • {first?.mo_ta || ""}
-                            </div>
+                <>
+                  {Object.entries(forecast.du_bao)
+                    .slice(0, 5)
+                    .map(([date, items]: [string, any[]], index) => {
+                      const first = items[0]
+                      return (
+                        <div key={date} className="flex items-center justify-between p-3 rounded-lg border bg-muted/50">
+                          <div className="flex items-center gap-3">
+                            {first?.icon ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={first.icon} alt={first.mo_ta || "forecast"} className="h-6 w-6 object-contain" />
+                            ) : (
+                              getWeatherIcon("sunny")
+                            )}
+                            <span className="font-medium">{new Date(date).toLocaleDateString("vi-VN", { weekday: 'short', day: 'numeric', month: 'short' })}</span>
                           </div>
-                        )
-                      })}
-                  </div>
-                </div>
+                          <div className="text-sm font-medium">
+                            {first?.nhiet_do || "--"} • {first?.mo_ta || ""}
+                          </div>
+                        </div>
+                      )
+                    })}
+                </>
               )}
             </div>
           </CardContent>
@@ -457,42 +455,42 @@ export function MapsTab({ tripId }: MapsTabProps) {
               <div className="max-h-80 md:max-h-96 overflow-y-auto pr-2">
                 <div className="grid grid-cols-1 gap-4">
                 {hotels.map((hotel) => (
-                  <div
-                    key={hotel.id}
-                    className="border rounded-lg overflow-hidden hover:shadow-lg transition-shadow flex flex-col sm:flex-row"
-                  >
-                    <img
-                      src={hotel.anh || "/placeholder.svg"}
-                      alt={hotel.ten}
-                      className="w-full sm:w-40 h-36 object-cover"
-                    />
-                    <div className="p-4 flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Badge variant="secondary" className="text-xs">Khách sạn</Badge>
-                        {hotel.danh_gia != null && (
-                          <div className="flex items-center gap-1 text-xs">
-                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                            <span>{hotel.danh_gia}</span>
-                          </div>
-                        )}
-                      </div>
-                      <h4 className="font-semibold mb-1 line-clamp-2">{hotel.ten}</h4>
-                      <p className="text-xs text-muted-foreground mb-2">{hotel.vi_tri}</p>
-                      <div className="flex items-center justify-between mt-auto">
-                        <span className="text-lg font-bold text-primary">{hotel.gia || "Liên hệ"}</span>
-                        <div className="flex items-center gap-2">
-                          <Button size="sm" variant="outline" onClick={() => setSelectedHotel(hotel)}>
-                            Xem chi tiết
-                          </Button>
-                          {hotel.link && (
-                            <a href={hotel.link} target="_blank" rel="noopener noreferrer">
-                              <Button size="sm">Đặt ngay</Button>
-                            </a>
+                  <Card key={hotel.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                    <div className="flex flex-col sm:flex-row">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={hotel.anh || "/placeholder.svg"}
+                        alt={hotel.ten}
+                        className="w-full sm:w-40 h-36 object-cover"
+                      />
+                      <CardContent className="p-4 flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge variant="secondary" className="text-xs">Khách sạn</Badge>
+                          {hotel.danh_gia != null && (
+                            <div className="flex items-center gap-1 text-xs">
+                              <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                              <span>{hotel.danh_gia}</span>
+                            </div>
                           )}
                         </div>
-                      </div>
+                        <h4 className="font-semibold mb-1 line-clamp-2">{hotel.ten}</h4>
+                        <p className="text-xs text-muted-foreground mb-2">{hotel.vi_tri}</p>
+                        <div className="flex items-center justify-between mt-auto">
+                          <span className="text-lg font-bold text-primary">{hotel.gia || "Liên hệ"}</span>
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" variant="outline" onClick={() => setSelectedHotel(hotel)}>
+                              Xem chi tiết
+                            </Button>
+                            {hotel.link && (
+                              <a href={hotel.link} target="_blank" rel="noopener noreferrer">
+                                <Button size="sm">Đặt ngay</Button>
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
                     </div>
-                  </div>
+                  </Card>
                 ))}
                 {!loadingHotels && hotels.length === 0 && !hotelError && hotelQuery && (
                   <p className="text-sm text-muted-foreground">Nhập địa điểm và bấm "Tìm khách sạn" để xem gợi ý.</p>

@@ -1,5 +1,5 @@
 "use client"
-
+import { Lock } from "lucide-react";
 import { useState, useEffect, useRef } from "react"
 import axios from "axios"
 import Cookies from "js-cookie"
@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Bell, Settings, LogOut, Plane, Globe, Home, Users, User, Upload, ImageIcon } from "lucide-react"
+import { Bell, Settings, LogOut, Plane, Globe, Home, Users, User, Upload, ImageIcon, Eye, EyeOff } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,11 +37,17 @@ export function DashboardHeader() {
   const [showFriends, setShowFriends] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showAvatarModal, setShowAvatarModal] = useState(false)
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [isUpdating, setIsUpdating] = useState(false)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
   const [selectedAvatarFile, setSelectedAvatarFile] = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [matKhauCu, setMatKhauCu] = useState("")
+  const [matKhauMoi, setMatKhauMoi] = useState("")
+  const [showMatKhauCu, setShowMatKhauCu] = useState(false)
+  const [showMatKhauMoi, setShowMatKhauMoi] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const pathname = usePathname()
   const router = useRouter()
@@ -112,7 +118,7 @@ export function DashboardHeader() {
         })
       } catch (error: any) {
         console.error("Lỗi khi lấy thông tin người dùng:", error)
-        
+
         // Kiểm tra loại lỗi
         if (axios.isAxiosError(error)) {
           if (error.response?.status === 401) {
@@ -127,7 +133,7 @@ export function DashboardHeader() {
         } else {
           console.error("Unknown error:", error)
         }
-        
+
         router.replace("/login") // fallback → quay lại login
       } finally {
         setLoading(false)
@@ -140,7 +146,7 @@ export function DashboardHeader() {
   // ✅ Hàm fetch số thông báo chưa đọc
   const fetchUnreadCount = async () => {
     const token = Cookies.get("token")
-    
+
     if (!token || token === "null" || token === "undefined") {
       return
     }
@@ -254,7 +260,7 @@ export function DashboardHeader() {
       )
 
       const newAvatarUrl = response.data?.avatar_url || ""
-      
+
       // Cập nhật lại state user
       setUser((prev) => ({
         ...prev,
@@ -311,6 +317,89 @@ export function DashboardHeader() {
       })
     } finally {
       setIsUploadingAvatar(false)
+    }
+  }
+
+  // ✅ Hàm đổi mật khẩu
+  const handleChangePassword = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setIsChangingPassword(true)
+
+    const token = Cookies.get("token")
+    if (!token || token === "null" || token === "undefined") {
+      toast({
+        title: "Lỗi",
+        description: "Phiên đăng nhập đã hết hạn",
+        variant: "destructive",
+      })
+      router.replace("/login")
+      return
+    }
+
+    // Validate
+    if (!matKhauCu || !matKhauMoi) {
+      toast({
+        title: "Lỗi",
+        description: "Vui lòng nhập đầy đủ mật khẩu cũ và mật khẩu mới",
+        variant: "destructive",
+      })
+      setIsChangingPassword(false)
+      return
+    }
+
+    if (matKhauMoi.length < 6) {
+      toast({
+        title: "Lỗi",
+        description: "Mật khẩu mới phải có ít nhất 6 ký tự",
+        variant: "destructive",
+      })
+      setIsChangingPassword(false)
+      return
+    }
+
+    if (matKhauMoi === matKhauCu) {
+      toast({
+        title: "Lỗi",
+        description: "Mật khẩu mới không được trùng với mật khẩu cũ",
+        variant: "destructive",
+      })
+      setIsChangingPassword(false)
+      return
+    }
+
+    try {
+      const response = await axios.put(
+        "https://travel-planner-imdw.onrender.com/api/taikhoan/doi-mat-khau",
+        {
+          mat_khau_cu: matKhauCu,
+          mat_khau_moi: matKhauMoi,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      toast({
+        title: "Thành công",
+        description: response.data?.message || "Đổi mật khẩu thành công và đã gửi thông báo.",
+      })
+
+      // Reset form
+      setMatKhauCu("")
+      setMatKhauMoi("")
+      setShowChangePasswordModal(false)
+    } catch (error: any) {
+      console.error("❌ Lỗi khi đổi mật khẩu:", error)
+      toast({
+        title: "Lỗi",
+        description: error.response?.data?.message || error.message || "Không thể đổi mật khẩu",
+        variant: "destructive",
+      })
+    } finally {
+      setIsChangingPassword(false)
     }
   }
 
@@ -491,6 +580,10 @@ export function DashboardHeader() {
                   <User className="mr-2 h-4 w-4" />
                   <span>Cập nhật thông tin</span>
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowChangePasswordModal(true)}>
+                  <Lock className="mr-2 h-4 w-4" />
+                  <span>Đổi mật khẩu</span>
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setShowAvatarModal(true)}>
                   <Upload className="mr-2 h-4 w-4" />
                   <span>Cập nhật ảnh đại diện</span>
@@ -513,7 +606,7 @@ export function DashboardHeader() {
 
       {/* Trung tâm thông báo */}
       <NotificationCenter isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
-      
+
       {/* Modal quản lý bạn bè */}
       <FriendsModal isOpen={showFriends} onClose={() => setShowFriends(false)} />
 
@@ -577,7 +670,7 @@ export function DashboardHeader() {
             <DialogTitle>Cập nhật ảnh đại diện</DialogTitle>
             <DialogDescription>Chọn ảnh đại diện mới cho tài khoản của bạn. (Tối đa 5MB)</DialogDescription>
           </DialogHeader>
-          
+
           <div className="grid gap-4 py-4">
             {/* Preview avatar */}
             <div className="flex flex-col items-center gap-4">
@@ -589,7 +682,7 @@ export function DashboardHeader() {
                   </AvatarFallback>
                 </Avatar>
               </div>
-              
+
               <input
                 ref={avatarInputRef}
                 type="file"
@@ -597,7 +690,7 @@ export function DashboardHeader() {
                 className="hidden"
                 onChange={handleAvatarSelect}
               />
-              
+
               <Button
                 type="button"
                 variant="outline"
@@ -607,7 +700,7 @@ export function DashboardHeader() {
                 <ImageIcon className="mr-2 h-4 w-4" />
                 {selectedAvatarFile ? "Chọn ảnh khác" : "Chọn ảnh"}
               </Button>
-              
+
               {selectedAvatarFile && (
                 <p className="text-sm text-muted-foreground text-center">
                   Đã chọn: {selectedAvatarFile.name}
@@ -642,6 +735,87 @@ export function DashboardHeader() {
               {isUploadingAvatar ? "Đang tải lên..." : "Lưu ảnh đại diện"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal đổi mật khẩu */}
+      <Dialog open={showChangePasswordModal} onOpenChange={setShowChangePasswordModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Đổi mật khẩu</DialogTitle>
+            <DialogDescription>
+              Nhập mật khẩu cũ và mật khẩu mới của bạn. Mật khẩu mới phải có ít nhất 6 ký tự.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleChangePassword}>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="mat_khau_cu">Mật khẩu cũ</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="mat_khau_cu"
+                    type={showMatKhauCu ? "text" : "password"}
+                    placeholder="Nhập mật khẩu cũ"
+                    value={matKhauCu}
+                    onChange={(e) => setMatKhauCu(e.target.value)}
+                    className="pl-10 pr-10"
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1 h-8 w-8"
+                    onClick={() => setShowMatKhauCu(!showMatKhauCu)}
+                  >
+                    {showMatKhauCu ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="mat_khau_moi">Mật khẩu mới</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="mat_khau_moi"
+                    type={showMatKhauMoi ? "text" : "password"}
+                    placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)"
+                    value={matKhauMoi}
+                    onChange={(e) => setMatKhauMoi(e.target.value)}
+                    className="pl-10 pr-10"
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1 h-8 w-8"
+                    onClick={() => setShowMatKhauMoi(!showMatKhauMoi)}
+                  >
+                    {showMatKhauMoi ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowChangePasswordModal(false)
+                  setMatKhauCu("")
+                  setMatKhauMoi("")
+                }}
+                disabled={isChangingPassword}
+              >
+                Hủy
+              </Button>
+              <Button type="submit" disabled={isChangingPassword}>
+                {isChangingPassword ? "Đang đổi mật khẩu..." : "Đổi mật khẩu"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </>

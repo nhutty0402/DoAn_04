@@ -57,18 +57,39 @@ export function RegisterForm({ onClose }: RegisterFormProps) {
         }),
       })
 
-      if (!response.ok) throw new Error("Đăng ký thất bại")
+      // Parse response JSON
+      const data = await response.json()
 
+      if (!response.ok) {
+        // Xử lý lỗi từ API
+        throw new Error(data.message || "Đăng ký thất bại")
+      }
+
+      // ✅ Xử lý response thành công từ API
+      console.log("✅ Đăng ký thành công:", data)
+      console.log("✅ nguoi_dung_id:", data.nguoi_dung_id)
+
+      // Lưu nguoi_dung_id vào localStorage nếu cần (tùy chọn)
+      if (data.nguoi_dung_id) {
+        localStorage.setItem("registered_user_id", data.nguoi_dung_id)
+      }
+
+      // Sử dụng message từ API response
       toast({
         title: "Đăng ký thành công!",
-        description: "Tài khoản của bạn đã được tạo. Vui lòng đăng nhập.",
+        description: data.message || "Tài khoản của bạn đã được tạo. Vui lòng kiểm tra email để xác thực.",
       })
 
       onClose()
-    } catch (error) {
+    } catch (error: any) {
+      console.error("❌ Lỗi đăng ký:", error)
+      
+      // Hiển thị message lỗi từ API hoặc error message
+      const errorMessage = error.message || "Có lỗi xảy ra khi tạo tài khoản"
+      
       toast({
         title: "Lỗi đăng ký",
-        description: "Có lỗi xảy ra khi tạo tài khoản",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {

@@ -13,18 +13,22 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { X, DollarSign, Receipt, Percent } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { motion } from "framer-motion"
+import axios from "axios"
+import Cookies from "js-cookie"
+import { useRouter } from "next/navigation"
 
 interface AddExpenseModalProps {
   onClose: () => void
   onSubmit: (expenseData: any) => void
   members: any[]
+  tripId: string
 }
 
-export function AddExpenseModal({ onClose, onSubmit, members }: AddExpenseModalProps) {
+export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpenseModalProps) {
   const [formData, setFormData] = useState({
     tenChiPhi: "",
     soTien: "",
-    loaiChiPhi: "food",
+    loaiChiPhi: "ăn uống",
     nguoiTraId: members[0]?.id || "",
     ghiChu: "",
     hinhThucChia: "equal",
@@ -34,14 +38,17 @@ export function AddExpenseModal({ onClose, onSubmit, members }: AddExpenseModalP
   const [customPercents, setCustomPercents] = useState<Record<string, number>>({})
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
+  const router = useRouter()
 
   const expenseTypes = [
-    { value: "food", label: "Ăn uống" },
-    { value: "accommodation", label: "Lưu trú" },
-    { value: "transport", label: "Di chuyển" },
-    { value: "activity", label: "Hoạt động" },
-    { value: "shopping", label: "Mua sắm" },
-    { value: "other", label: "Khác" },
+    { value: "ăn uống", label: "Ăn uống" },
+    { value: "lưu trú", label: "Lưu trú" },
+    { value: "di chuyển", label: "Di chuyển" },
+    { value: "giải trí", label: "Giải trí" },
+    { value: "mua sắm", label: "Mua sắm" },
+    { value: "vé tham quan", label: "Vé tham quan" },
+    { value: "dịch vụ", label: "Dịch vụ" },
+    { value: "khác", label: "Khác" },
   ]
 
   const handleChange = (field: string, value: any) => {
@@ -119,26 +126,118 @@ export function AddExpenseModal({ onClose, onSubmit, members }: AddExpenseModalP
     setIsLoading(true)
 
     try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        toast({
+          title: "Lỗi xác thực",
+          description: "Vui lòng đăng nhập lại",
+          variant: "destructive",
+        })
+        router.replace("/login")
+        return
+      }
+
+      // Map hinh_thuc_chia: equal -> "equal", shares -> "custom", percent -> "percent"
+      let hinhThucChia = formData.hinhThucChia
+      if (hinhThucChia === "shares") {
+        hinhThucChia = "custom"
+      }
+
+      // Prepare thanh_vien array based on split type
+      let thanhVien: any[] = []
+      
+      if (formData.hinhThucChia === "equal") {
+        // For equal split, just send member IDs
+        thanhVien = formData.thanhVienThamGia.map((memberId) => {
+          const member = members.find((m) => m.id === memberId)
+          return member?.nguoi_dung_id || member?.id || memberId
+        })
+      } else if (formData.hinhThucChia === "shares") {
+        // For shares/custom split, send objects with nguoi_dung_id and ti_le
+        thanhVien = formData.thanhVienThamGia.map((memberId) => {
+          const member = members.find((m) => m.id === memberId)
+          const nguoiDungId = member?.nguoi_dung_id || member?.id || memberId
+          return {
+            nguoi_dung_id: nguoiDungId,
+            ti_le: customShares[memberId] || 1,
+          }
+        })
+      } else if (formData.hinhThucChia === "percent") {
+        // For percent split, send objects with nguoi_dung_id and phan_tram
+        thanhVien = formData.thanhVienThamGia.map((memberId) => {
+          const member = members.find((m) => m.id === memberId)
+          const nguoiDungId = member?.nguoi_dung_id || member?.id || memberId
+          return {
+            nguoi_dung_id: nguoiDungId,
+            phan_tram: customPercents[memberId] || 0,
+          }
+        })
+      }
+
+      // Prepare API payload
+      const apiPayload = {
+        chuyen_di_id: Number.parseInt(tripId),
+        so_tien: Number.parseFloat(formData.soTien),
+        nhom: formData.loaiChiPhi,
+        ngay: new Date().toISOString().split("T")[0], // Current date in YYYY-MM-DD format
+        mo_ta: formData.ghiChu || formData.tenChiPhi, // Use ghiChu or tenChiPhi as description
+        tien_te: "VND",
+        hinh_thuc_chia: hinhThucChia,
+        thanh_vien: thanhVien,
+      }
+
+      // Call API to create expense
+      const response = await axios.post(
+        "https://travel-planner-imdw.onrender.com/api/chi-phi",
+        apiPayload,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      const createdExpense = response.data
+
+      // Calculate split details for local state
       const chiTietChia = calculateSplit()
       const nguoiTra = members.find((m) => m.id === formData.nguoiTraId)
 
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      // Call onSubmit with the created expense data
       onSubmit({
         ...formData,
+        id: createdExpense?.chi_phi_id || createdExpense?.id || `exp${Date.now()}`,
         soTien: Number.parseFloat(formData.soTien),
         nguoiTra: nguoiTra?.name || "",
         chiTietChia,
+        ngayChiTieu: apiPayload.ngay,
+        _api: createdExpense,
       })
+
       toast({
         title: "Đã thêm chi phí",
         description: "Chi phí mới đã được thêm và chia sẻ",
       })
-    } catch (error) {
-      toast({
-        title: "Lỗi thêm chi phí",
-        description: "Có lỗi xảy ra khi thêm chi phí",
-        variant: "destructive",
-      })
+
+      onClose()
+    } catch (error: any) {
+      console.error("Lỗi khi thêm chi phí:", error)
+      
+      if (error?.response?.status === 401 || error?.response?.status === 403) {
+        toast({
+          title: "Lỗi xác thực",
+          description: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+          variant: "destructive",
+        })
+        router.replace("/login")
+      } else {
+        toast({
+          title: "Lỗi thêm chi phí",
+          description: error?.response?.data?.message || "Có lỗi xảy ra khi thêm chi phí",
+          variant: "destructive",
+        })
+      }
     } finally {
       setIsLoading(false)
     }

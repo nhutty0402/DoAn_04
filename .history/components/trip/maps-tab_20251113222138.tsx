@@ -23,14 +23,14 @@ interface MapsTabProps {
 //   { id: "4", name: "My Khe Beach", lat: 16.0471, lng: 108.2425, type: "beach", rating: 4.6 },
 // ]
 
-// const mockWeather = {
-//   current: { temp: 28, condition: "sunny", humidity: 65, wind: 12 },
-//   forecast: [
-//     { date: "2024-03-15", temp: { min: 22, max: 30 }, condition: "sunny" },
-//     { date: "2024-03-16", temp: { min: 24, max: 32 }, condition: "cloudy" },
-//     { date: "2024-03-17", temp: { min: 23, max: 29 }, condition: "rainy" },
-//   ],
-// }
+const mockWeather = {
+  current: { temp: 28, condition: "sunny", humidity: 65, wind: 12 },
+  forecast: [
+    { date: "2024-03-15", temp: { min: 22, max: 30 }, condition: "sunny" },
+    { date: "2024-03-16", temp: { min: 24, max: 32 }, condition: "cloudy" },
+    { date: "2024-03-17", temp: { min: 23, max: 29 }, condition: "rainy" },
+  ],
+}
 
 // const mockBookingSuggestions = [
 //   {
@@ -75,10 +75,14 @@ export function MapsTab({ tripId }: MapsTabProps) {
 
   // Các địa điểm phổ biến để gợi ý (hỗ trợ cả tiếng Việt có dấu và không dấu)
   const popularLocations = [
-    "Cần Thơ",
-    "An Giang",
-    "Thành Phố Hồ Chí Minh",
-    "Đồng Tháp",
+    "Hà Nội",
+    "Đà Nẵng",
+    "Hồ Chí Minh",
+    "Huế",
+    "Hội An",
+    "Nha Trang",
+    "Đà Lạt",
+    "Phú Quốc",
   ]
 
   // Function tìm khách sạn
@@ -358,31 +362,29 @@ export function MapsTab({ tripId }: MapsTabProps) {
                 <p className="text-sm text-destructive">{forecastError}</p>
               )}
               {!forecastLoading && !forecastError && forecast?.du_bao && (
-                <div className="max-h-48 md:max-h-56 overflow-y-auto pr-2 forecast-scroll">
-                  <div className="space-y-2">
-                    {Object.entries(forecast.du_bao)
-                      .slice(0, 5)
-                      .map(([date, items]: [string, any[]], index) => {
-                        const first = items[0]
-                        return (
-                          <div key={date} className="flex items-center justify-between p-3 rounded-lg border bg-muted/50">
-                            <div className="flex items-center gap-3">
-                              {first?.icon ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={first.icon} alt={first.mo_ta || "forecast"} className="h-6 w-6 object-contain" />
-                              ) : (
-                                getWeatherIcon("sunny")
-                              )}
-                              <span className="font-medium">{new Date(date).toLocaleDateString("vi-VN", { weekday: 'short', day: 'numeric', month: 'short' })}</span>
-                            </div>
-                            <div className="text-sm font-medium">
-                              {first?.nhiet_do || "--"} • {first?.mo_ta || ""}
-                            </div>
+                <>
+                  {Object.entries(forecast.du_bao)
+                    .slice(0, 5)
+                    .map(([date, items]: [string, any[]], index) => {
+                      const first = items[0]
+                      return (
+                        <div key={date} className="flex items-center justify-between p-3 rounded-lg border bg-muted/50">
+                          <div className="flex items-center gap-3">
+                            {first?.icon ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={first.icon} alt={first.mo_ta || "forecast"} className="h-6 w-6 object-contain" />
+                            ) : (
+                              getWeatherIcon("sunny")
+                            )}
+                            <span className="font-medium">{new Date(date).toLocaleDateString("vi-VN", { weekday: 'short', day: 'numeric', month: 'short' })}</span>
                           </div>
-                        )
-                      })}
-                  </div>
-                </div>
+                          <div className="text-sm font-medium">
+                            {first?.nhiet_do || "--"} • {first?.mo_ta || ""}
+                          </div>
+                        </div>
+                      )
+                    })}
+                </>
               )}
             </div>
           </CardContent>

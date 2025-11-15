@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -23,6 +23,10 @@ import { ExpensesList } from "@/components/expenses/expenses-list"
 import { ExpenseReports } from "@/components/expenses/expense-reports"
 import { ExpenseSettlement } from "@/components/expenses/expense-settlement"
 import { motion } from "framer-motion"
+import axios from "axios"
+import Cookies from "js-cookie"
+import { useRouter } from "next/navigation"
+import { useToast } from "@/hooks/use-toast"
 
 // Mock expense data
 const mockExpenses = [
@@ -94,43 +98,340 @@ interface ExpensesTabProps {
 }
 
 export function ExpensesTab({ tripId }: ExpensesTabProps) {
+  const router = useRouter()
+  const { toast } = useToast()
   const [expenses, setExpenses] = useState(mockExpenses)
   const [showAddModal, setShowAddModal] = useState(false)
   const [activeTab, setActiveTab] = useState("list")
-  const [totalBudget, setTotalBudget] = useState(10000000) // Default 10 million VND
+  const [totalBudget, setTotalBudget] = useState(0)
   const [showBudgetModal, setShowBudgetModal] = useState(false)
   const [tempBudget, setTempBudget] = useState("")
+  const [isLoadingBudget, setIsLoadingBudget] = useState(false)
+  const [isUpdatingBudget, setIsUpdatingBudget] = useState(false)
+  const [budgetInfo, setBudgetInfo] = useState<{
+    so_nguoi: number
+    muc_toi_thieu: number
+    canh_bao: boolean
+    thong_diep: string
+  } | null>(null)
+  const [members, setMembers] = useState<any[]>([])
+  const [loadingMembers, setLoadingMembers] = useState(false)
+  const [loadingExpenses, setLoadingExpenses] = useState(false)
 
   const totalExpenses = expenses.reduce((sum, exp) => sum + exp.soTien, 0)
-  const totalPerPerson = totalExpenses / mockMembers.length
+  const totalPerPerson = members.length > 0 ? totalExpenses / members.length : 0
   const remainingBudget = totalBudget - totalExpenses
   const budgetUsedPercentage = totalBudget > 0 ? (totalExpenses / totalBudget) * 100 : 0
 
-  const handleAddExpense = (expenseData: any) => {
-    const newExpense = {
-      id: `exp${Date.now()}`,
-      ...expenseData,
-      ngayChiTieu: new Date().toISOString().split("T")[0],
+  // Fetch expenses from API
+  const fetchExpenses = async () => {
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("Không có token để lấy danh sách chi phí")
+        return
+      }
+
+      if (!tripId) return
+
+      setLoadingExpenses(true)
+      const response = await axios.get(
+        `https://travel-planner-imdw.onrender.com/api/chi-phi/chuyen-di/${tripId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      // Backend trả về: { message, tong_so, danh_sach: [...] }
+      const apiData = response.data?.danh_sach || []
+
+      // Map expenses from API response
+      const expensesWithDetails = apiData.map((expense: any) => {
+        // Map expense type (nhom) - it's already in Vietnamese
+        const loaiChiPhi = expense.nhom || "khác"
+
+        // Map hinh_thuc_chia - convert "custom" back to "shares" for display
+        let hinhThucChia = expense.hinh_thuc_chia || "equal"
+        if (hinhThucChia === "custom") {
+          hinhThucChia = "shares"
+        }
+
+        // If chi_tiet is included in the response, use it
+        // Otherwise, we'll need to fetch it separately or construct it
+        const chiTiet = expense.chi_tiet || []
+        const chiTietChia: Record<string, { soTien: number; daTra: boolean }> = {}
+        const thanhVienThamGia: string[] = []
+
+        if (Array.isArray(chiTiet) && chiTiet.length > 0) {
+          chiTiet.forEach((detail: any) => {
+            const memberId = String(detail.nguoi_dung_id || "")
+            if (!thanhVienThamGia.includes(memberId)) {
+              thanhVienThamGia.push(memberId)
+            }
+            chiTietChia[memberId] = {
+              soTien: Number.parseFloat(detail.so_tien_phai_tra || 0),
+              daTra: false, // Default to false, can be updated if there's a field for this
+            }
+          })
+        }
+
+        return {
+          id: String(expense.chi_phi_id || ""),
+          chi_phi_id: expense.chi_phi_id,
+          tenChiPhi: expense.mo_ta || `${expense.nhom} - ${expense.ngay}`,
+          soTien: Number.parseFloat(expense.so_tien || 0),
+          loaiChiPhi,
+          ngayChiTieu: expense.ngay || new Date().toISOString().split("T")[0],
+          nguoiTra: expense.nguoi_chi || "",
+          nguoiTraId: String(expense.nguoi_chi_id || ""),
+          ghiChu: expense.mo_ta || "",
+          hinhThucChia,
+          thanhVienThamGia,
+          chiTietChia,
+          tien_te: expense.tien_te || "VND",
+          tao_luc: expense.tao_luc || "",
+          _api: expense,
+        }
+      })
+
+      setExpenses(expensesWithDetails)
+    } catch (error: any) {
+      console.error("Lỗi khi lấy danh sách chi phí:", error)
+      if (error?.response?.status === 401 || error?.response?.status === 403) {
+        router.replace("/login")
+      } else {
+        toast({
+          title: "Lỗi",
+          description: error?.response?.data?.message || "Không thể tải danh sách chi phí",
+          variant: "destructive",
+        })
+        // Keep mock expenses on error
+      }
+    } finally {
+      setLoadingExpenses(false)
     }
-    setExpenses([newExpense, ...expenses])
+  }
+
+  // Fetch members from API
+  const fetchMembers = async () => {
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("Không có token để lấy danh sách thành viên")
+        return
+      }
+
+      if (!tripId) return
+
+      setLoadingMembers(true)
+      const response = await axios.get(
+        `https://travel-planner-imdw.onrender.com/api/thanh-vien/${tripId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      // Backend trả về: { message, tong_so, danh_sach: [...] }
+      const apiData = response.data?.danh_sach || []
+      
+      // Map API response to component format - only accepted members
+      const mappedMembers = apiData
+        .filter((item: any) => item.trang_thai_tham_gia === "accepted")
+        .map((item: any) => ({
+          id: String(item.nguoi_dung_id || ""),
+          nguoi_dung_id: item.nguoi_dung_id,
+          name: item.ho_ten || "",
+          ho_ten: item.ho_ten || "",
+          email: item.email || "",
+        }))
+
+      setMembers(mappedMembers)
+    } catch (error: any) {
+      console.error("Lỗi khi lấy danh sách thành viên:", error)
+      if (error?.response?.status === 401 || error?.response?.status === 403) {
+        router.replace("/login")
+      } else {
+        // Fallback to mock members if API fails
+        setMembers(mockMembers)
+      }
+    } finally {
+      setLoadingMembers(false)
+    }
+  }
+
+  // Fetch members and expenses on mount
+  useEffect(() => {
+    if (tripId) {
+      fetchMembers()
+      fetchExpenses()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripId])
+
+  // Fetch budget from API
+  const fetchBudget = async () => {
+    try {
+      const token = Cookies.get("token")
+      console.log("Token từ cookie:", token)
+
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("Không có token → chuyển về /login")
+        router.replace("/login")
+        return
+      }
+
+      if (!tripId) return
+
+      setIsLoadingBudget(true)
+      const res = await axios.get(
+        `https://travel-planner-imdw.onrender.com/api/chi-phi/tong-ngan-sach/${tripId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+
+      const data = res?.data
+      if (data) {
+        setTotalBudget(data.tong_ngan_sach || 0)
+        setBudgetInfo({
+          so_nguoi: data.so_nguoi || 0,
+          muc_toi_thieu: data.muc_toi_thieu || 0,
+          canh_bao: data.canh_bao || false,
+          thong_diep: data.thong_diep || "",
+        })
+
+        // Show warning toast if budget is low
+        if (data.canh_bao && data.thong_diep) {
+          toast({
+            title: "⚠️ Cảnh báo ngân sách",
+            description: data.thong_diep,
+            variant: "destructive",
+          })
+        }
+      }
+    } catch (error: any) {
+      console.error("Lỗi khi lấy ngân sách:", error)
+      if (error?.response?.status === 401 || error?.response?.status === 403) {
+        router.replace("/login")
+      } else {
+        toast({
+          title: "Lỗi",
+          description: error?.response?.data?.message || "Không thể lấy thông tin ngân sách",
+          variant: "destructive",
+        })
+      }
+    } finally {
+      setIsLoadingBudget(false)
+    }
+  }
+
+  // Fetch budget on mount
+  useEffect(() => {
+    if (tripId) {
+      fetchBudget()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripId])
+
+  const handleAddExpense = (expenseData: any) => {
+    // Refresh expenses list after adding new expense
+    fetchExpenses()
     setShowAddModal(false)
   }
 
-  const handleUpdateBudget = () => {
-    const newBudget = Number.parseFloat(tempBudget.replace(/,/g, ""))
-    if (!isNaN(newBudget) && newBudget > 0) {
-      setTotalBudget(newBudget)
+  const handleUpdateBudget = async () => {
+    try {
+      const token = Cookies.get("token")
+      console.log("Token từ cookie:", token)
+
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("Không có token → chuyển về /login")
+        router.replace("/login")
+        return
+      }
+
+      if (!tripId) {
+        toast({
+          title: "Thiếu ID chuyến đi",
+          description: "Không tìm thấy ID chuyến đi",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const soTien = Number.parseFloat(tempBudget.replace(/,/g, ""))
+      if (isNaN(soTien) || soTien <= 0) {
+        toast({
+          title: "Số tiền không hợp lệ",
+          description: "Vui lòng nhập số tiền lớn hơn 0",
+          variant: "destructive",
+        })
+        return
+      }
+
+      setIsUpdatingBudget(true)
+      const res = await axios.post(
+        `https://travel-planner-imdw.onrender.com/api/chi-phi/tong-ngan-sach/${tripId}`,
+        {
+          so_tien: soTien,
+          mode: "add", // Cộng dồn theo yêu cầu
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      const data = res?.data
+      toast({
+        title: "Thành công",
+        description: data?.message || "Bổ sung ngân sách thành công",
+      })
+
+      // Update local state with new total budget
+      if (data?.tong_ngan_sach_moi !== undefined) {
+        setTotalBudget(data.tong_ngan_sach_moi)
+      }
+
+      // Refresh budget info
+      await fetchBudget()
+
       setShowBudgetModal(false)
       setTempBudget("")
+    } catch (error: any) {
+      console.error("Lỗi khi cập nhật ngân sách:", error)
+      if (error?.response?.status === 401 || error?.response?.status === 403) {
+        router.replace("/login")
+      } else {
+        toast({
+          title: "Cập nhật thất bại",
+          description: error?.response?.data?.message || "Không thể cập nhật ngân sách",
+          variant: "destructive",
+        })
+      }
+    } finally {
+      setIsUpdatingBudget(false)
     }
   }
 
   const stats = [
     {
       title: "Ngân sách tổng",
-      value: `${totalBudget.toLocaleString("vi-VN")} VNĐ`,
+      value: isLoadingBudget ? "Đang tải..." : `${totalBudget.toLocaleString("vi-VN")} VNĐ`,
       icon: <Wallet className="h-5 w-5 text-blue-600" />,
-      description: "Tổng tiền hiện có",
+      description: budgetInfo
+        ? `${budgetInfo.so_nguoi} người • Tối thiểu: ${budgetInfo.muc_toi_thieu.toLocaleString("vi-VN")} VNĐ`
+        : "Tổng tiền hiện có",
     },
     {
       title: "Đã chi tiêu",
@@ -184,36 +485,55 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
               <div className="space-y-3 pt-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="budget" className="text-sm font-medium">
-                    Tổng tiền hiện có (VNĐ)
+                    Số tiền bổ sung (VNĐ)
                   </Label>
                   <Input
                     id="budget"
                     type="text"
-                    placeholder="Nhập số tiền..."
+                    placeholder="Nhập số tiền muốn thêm..."
                     value={tempBudget}
                     onChange={(e) => {
                       const value = e.target.value.replace(/[^\d]/g, "")
                       setTempBudget(value ? Number.parseInt(value).toLocaleString("vi-VN") : "")
                     }}
+                    disabled={isUpdatingBudget}
                   />
-                  {/* <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Ngân sách hiện tại:{" "}
                     <span className="font-medium text-foreground">
                       {totalBudget.toLocaleString("vi-VN")} VNĐ
                     </span>
-                  </p> */}
+                    {budgetInfo && (
+                      <>
+                        <br />
+                        Số người: {budgetInfo.so_nguoi} • Mức tối thiểu:{" "}
+                        {budgetInfo.muc_toi_thieu.toLocaleString("vi-VN")} VNĐ
+                        {budgetInfo.canh_bao && (
+                          <span className="text-red-500 block mt-1">⚠️ {budgetInfo.thong_diep}</span>
+                        )}
+                      </>
+                    )}
+                  </p>
                 </div>
 
                 <div className="flex justify-end gap-2 pt-1">
                   <Button
                     variant="outline"
                     className="px-4 py-1.5 text-sm"
-                    onClick={() => setShowBudgetModal(false)}
+                    onClick={() => {
+                      setShowBudgetModal(false)
+                      setTempBudget("")
+                    }}
+                    disabled={isUpdatingBudget}
                   >
                     Hủy
                   </Button>
-                  <Button className="px-4 py-1.5 text-sm" onClick={handleUpdateBudget}>
-                    Cập nhật
+                  <Button
+                    className="px-4 py-1.5 text-sm"
+                    onClick={handleUpdateBudget}
+                    disabled={isUpdatingBudget}
+                  >
+                    {isUpdatingBudget ? "Đang cập nhật..." : "Bổ sung ngân sách"}
                   </Button>
                 </div>
               </div>
@@ -304,15 +624,15 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
         </TabsList>
 
         <TabsContent value="list">
-          <ExpensesList expenses={expenses} members={mockMembers} onUpdateExpense={setExpenses} />
+          <ExpensesList expenses={expenses} members={members.length > 0 ? members : mockMembers} onUpdateExpense={setExpenses} />
         </TabsContent>
 
         <TabsContent value="reports">
-          <ExpenseReports expenses={expenses} members={mockMembers} />
+          <ExpenseReports expenses={expenses} members={members.length > 0 ? members : mockMembers} />
         </TabsContent>
 
         <TabsContent value="settlement">
-          <ExpenseSettlement expenses={expenses} members={mockMembers} />
+          <ExpenseSettlement expenses={expenses} members={members.length > 0 ? members : mockMembers} />
         </TabsContent>
 
         <TabsContent value="history">
@@ -326,7 +646,12 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
 
       {/* Add Expense Modal */}
       {showAddModal && (
-        <AddExpenseModal onClose={() => setShowAddModal(false)} onSubmit={handleAddExpense} members={mockMembers} />
+        <AddExpenseModal
+          onClose={() => setShowAddModal(false)}
+          onSubmit={handleAddExpense}
+          members={members.length > 0 ? members : mockMembers}
+          tripId={tripId}
+        />
       )}
     </div>
   )

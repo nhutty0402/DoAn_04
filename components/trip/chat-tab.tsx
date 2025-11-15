@@ -536,7 +536,7 @@ export function ChatTab({ tripId }: ChatTabProps) {
               >
                 <Search className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="icon">
+              {/* <Button variant="ghost" size="icon">
                 <Phone className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="icon">
@@ -544,7 +544,7 @@ export function ChatTab({ tripId }: ChatTabProps) {
               </Button>
               <Button variant="ghost" size="icon">
                 <Settings className="h-4 w-4" />
-              </Button>
+              </Button> */}
             </div>
           </div>
 

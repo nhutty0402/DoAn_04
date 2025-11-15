@@ -44,7 +44,12 @@ interface Member {
 export function MembersTab({ members: initialMembers, tripId, currentUserId }: MembersTabProps) {
   const [showInviteModal, setShowInviteModal] = useState(false)
   const { toast } = useToast()
-  const [inviteInfo, setInviteInfo] = useState<{ ma_code: string; invite_link: string; qr_code: string } | null>(null)
+  const [inviteInfo, setInviteInfo] = useState<{
+    ma_code: string
+    invite_link: string
+    qr_code: string
+    backend_link?: string
+  } | null>(null)
   const [creatingInvite, setCreatingInvite] = useState(false)
   const [showFriendsModal, setShowFriendsModal] = useState(false)
   const [friendList, setFriendList] = useState<any[]>([])
@@ -56,6 +61,10 @@ export function MembersTab({ members: initialMembers, tripId, currentUserId }: M
   const [loadingMembers, setLoadingMembers] = useState(false)
   const [showMembersModal, setShowMembersModal] = useState(false)
   const [membersCount, setMembersCount] = useState(0)
+  const [showPreviewModal, setShowPreviewModal] = useState(false)
+  const [loadingPreview, setLoadingPreview] = useState(false)
+  const [previewInfo, setPreviewInfo] = useState<any | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
 
   // ✅ Fetch danh sách thành viên từ API
   useEffect(() => {
@@ -164,7 +173,16 @@ export function MembersTab({ members: initialMembers, tripId, currentUserId }: M
       )
       const data = res.data || {}
       if (data && (data.invite_link || data.ma_code)) {
-        setInviteInfo({ ma_code: data.ma_code || "", invite_link: data.invite_link || "", qr_code: data.qr_code || "" })
+        const frontendOrigin = typeof window !== "undefined" ? window.location.origin : ""
+        const shareLink =
+          data?.ma_code && frontendOrigin ? `${frontendOrigin}/invite/${data.ma_code}` : data?.invite_link || ""
+
+        setInviteInfo({
+          ma_code: data.ma_code || "",
+          invite_link: shareLink,
+          backend_link: data.invite_link || "",
+          qr_code: data.qr_code || "",
+        })
         toast({ title: "Tạo mã mời thành công", description: data.message || "Đã tạo link mời." })
       } else {
         toast({ title: "Không nhận được dữ liệu hợp lệ", variant: "destructive" })
@@ -174,6 +192,42 @@ export function MembersTab({ members: initialMembers, tripId, currentUserId }: M
       toast({ title: "Lỗi", description: message, variant: "destructive" })
     } finally {
       setCreatingInvite(false)
+    }
+  }
+
+  const handlePreviewInvite = async () => {
+    const inviteLink = inviteInfo?.invite_link?.trim()
+    const maCodeFromLink = inviteLink ? inviteLink.split("/").filter(Boolean).pop() : ""
+    const maCode = (inviteInfo?.ma_code || maCodeFromLink || "").trim()
+
+    if (!maCode) {
+      toast({ title: "Thiếu mã mời", description: "Không tìm thấy mã mời để xem trước", variant: "destructive" })
+      return
+    }
+
+    setShowPreviewModal(true)
+    setLoadingPreview(true)
+    setPreviewInfo(null)
+    setPreviewError(null)
+
+    try {
+      const token = Cookies.get("token")
+      const headers: Record<string, string> = {}
+      if (token && token !== "null" && token !== "undefined") {
+        headers.Authorization = `Bearer ${token}`
+      }
+
+      const res = await axios.get(
+        `https://travel-planner-imdw.onrender.com/api/moi-thanh-vien/xem-truoc/${maCode}`,
+        { headers },
+      )
+      setPreviewInfo(res.data)
+    } catch (err: any) {
+      const message = err?.response?.data?.message || err?.message || "Không thể xem trước chuyến đi"
+      setPreviewError(message)
+      toast({ title: "Lỗi", description: message, variant: "destructive" })
+    } finally {
+      setLoadingPreview(false)
     }
   }
 
@@ -399,16 +453,32 @@ export function MembersTab({ members: initialMembers, tripId, currentUserId }: M
         </CardHeader>
         <CardContent className="space-y-4">
           {/* <p className="text-sm text-muted-foreground">Chia sẻ link này để mời người khác tham gia chuyến đi</p> */}
-          <div className="flex gap-2">
-          <div className="flex-1 p-3 bg-muted rounded-md text-sm font-mono overflow-x-auto whitespace-nowrap">
-           {inviteInfo?.invite_link || "Chưa có link mời"}
-          </div>
+          <div className="flex gap-2 items-stretch">
+            <button
+              type="button"
+              className="flex-1 p-3 bg-muted rounded-md text-sm font-mono overflow-x-auto whitespace-nowrap text-left transition hover:bg-muted/80 disabled:cursor-not-allowed"
+              // onClick={handlePreviewInvite}
+              disabled={!inviteInfo?.invite_link && !inviteInfo?.ma_code}
+              title={inviteInfo?.invite_link ? "Bấm để xem tổng quan chuyến đi" : undefined}
+            >
+              {inviteInfo?.invite_link || "Chưa có link mời"}
+            </button>
 
-            <Button variant="outline" onClick={handleCopyInvite} disabled={!inviteInfo?.invite_link}>Sao chép</Button>
+            <Button variant="outline" onClick={handleCopyInvite} disabled={!inviteInfo?.invite_link}>
+              Sao chép
+            </Button>
           </div>
           <Button variant="outline" className="w-full bg-transparent" onClick={handleCreateInviteLink} disabled={!!inviteInfo || creatingInvite}>
             {inviteInfo ? "Đã tạo link" : creatingInvite ? "Đang tạo..." : "Tạo Link Mới"}
           </Button>
+          {/* <Button
+            variant="secondary"
+            className="w-full"
+            disabled={!inviteInfo?.invite_link && !inviteInfo?.ma_code}
+            onClick={handlePreviewInvite}
+          >
+            Xem tổng quan chuyến đi
+          </Button> */}
         </CardContent>
       </Card>
 
@@ -685,6 +755,82 @@ export function MembersTab({ members: initialMembers, tripId, currentUserId }: M
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal xem trước chuyến đi từ mã mời */}
+      <Dialog
+        open={showPreviewModal}
+        onOpenChange={(open) => {
+          setShowPreviewModal(open)
+          if (!open) {
+            setPreviewInfo(null)
+            setPreviewError(null)
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogTitle>Xem tổng quan chuyến đi</DialogTitle>
+          {loadingPreview ? (
+            <p>Đang tải thông tin...</p>
+          ) : previewError ? (
+            <p className="text-destructive text-sm">{previewError}</p>
+          ) : previewInfo ? (
+            <div className="space-y-3 text-sm">
+              <div>
+                <span className="font-medium">Tên chuyến đi:</span> {previewInfo.ten_chuyen_di || "-"}
+              </div>
+              <div>
+                <span className="font-medium">Mã chuyến đi:</span> {previewInfo.chuyen_di_id || "-"}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="font-medium">Ngày tạo:</span>{" "}
+                  {previewInfo.ngay_tao ? new Date(previewInfo.ngay_tao).toLocaleString("vi-VN") : "-"}
+                </div>
+                <div>
+                  <span className="font-medium">Ngày bắt đầu:</span>{" "}
+                  {previewInfo.ngay_bat_dau ? new Date(previewInfo.ngay_bat_dau).toLocaleDateString("vi-VN") : "-"}
+                </div>
+                <div>
+                  <span className="font-medium">Ngày kết thúc:</span>{" "}
+                  {previewInfo.ngay_ket_thuc ? new Date(previewInfo.ngay_ket_thuc).toLocaleDateString("vi-VN") : "-"}
+                </div>
+                <div>
+                  <span className="font-medium">Số lượng thành viên:</span> {previewInfo.so_luong_thanh_vien ?? 0}
+                </div>
+              </div>
+              {Array.isArray(previewInfo.thanh_vien) && previewInfo.thanh_vien.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="font-medium">Thành viên:</p>
+                  <div className="flex flex-col gap-2 max-h-56 overflow-y-auto">
+                    {previewInfo.thanh_vien.map((tv: any, idx: number) => (
+                      <div key={`${tv.ho_ten}-${idx}`} className="flex items-center gap-3 border-b pb-2 last:border-0">
+                        <Avatar className="h-9 w-9">
+                          <AvatarImage src={tv.avatar_url || "/placeholder-user.jpg"} alt={tv.ho_ten || "Thành viên"} />
+                          <AvatarFallback>
+                            {(tv.ho_ten || "")
+                              .split(" ")
+                              .map((n: string) => n[0])
+                              .join("")
+                              .toUpperCase()
+                              .slice(0, 2) || "TV"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="font-medium">{tv.ho_ten || "Thành viên"}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-sm">Chưa có thành viên nào.</p>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Chưa có dữ liệu để hiển thị.</p>
+          )}
         </DialogContent>
       </Dialog>
     </div>
