@@ -249,6 +249,8 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
           name: item.ho_ten || "",
           ho_ten: item.ho_ten || "",
           email: item.email || "",
+          role: item.role || item.vai_tro || "",
+          vai_tro: item.vai_tro || item.role || "",
         }))
 
       setMembers(mappedMembers)
@@ -341,9 +343,16 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripId])
 
-  const handleAddExpense = (expenseData: any) => {
-    // Refresh expenses list after adding new expense
-    fetchExpenses()
+  const handleAddExpense = async (expenseData: any) => {
+    // ✅ Gọi lại API chi phí và ngân sách sau khi thêm thành công
+    try {
+      await Promise.all([
+        fetchExpenses(), // Refresh danh sách chi phí
+        fetchBudget(),   // Refresh ngân sách (có thể đã thay đổi)
+      ])
+    } catch (error) {
+      console.error("Lỗi khi refresh dữ liệu sau khi thêm chi phí:", error)
+    }
     setShowAddModal(false)
   }
 
@@ -367,7 +376,7 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
         return
       }
 
-      const soTien = Number.parseFloat(tempBudget.replace(/,/g, ""))
+      const soTien = Number.parseFloat(tempBudget.replace(/[^\d]/g, ""))
       if (isNaN(soTien) || soTien <= 0) {
         toast({
           title: "Số tiền không hợp lệ",
@@ -490,11 +499,11 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
                   <Input
                     id="budget"
                     type="text"
-                    placeholder="Nhập số tiền muốn thêm..."
+                    placeholder="Nhập số tiền muốn thêm (VNĐ)..."
                     value={tempBudget}
                     onChange={(e) => {
                       const value = e.target.value.replace(/[^\d]/g, "")
-                      setTempBudget(value ? Number.parseInt(value).toLocaleString("vi-VN") : "")
+                      setTempBudget(value ? Number.parseInt(value).toLocaleString("vi-VN") + " VNĐ" : "")
                     }}
                     disabled={isUpdatingBudget}
                   />
@@ -628,7 +637,7 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
         </TabsContent>
 
         <TabsContent value="reports">
-          <ExpenseReports expenses={expenses} members={members.length > 0 ? members : mockMembers} />
+          <ExpenseReports expenses={expenses} members={members.length > 0 ? members : mockMembers} tripId={tripId} />
         </TabsContent>
 
         <TabsContent value="settlement">

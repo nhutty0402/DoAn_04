@@ -209,8 +209,16 @@ export default function InvitePreviewPage({ params }: InvitePreviewPageProps) {
                     Đăng nhập hoặc đăng ký để nhận lời mời chính thức và đồng hành cùng đội nhóm trong chuyến đi này.
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    <Button asChild>
-                      <Link href="/login">Đăng nhập</Link>
+                    <Button
+                      onClick={() => {
+                        // ✅ Lưu mã mời vào localStorage để dùng sau khi đăng nhập
+                        if (inviteCode) {
+                          localStorage.setItem("pending_invite_code", inviteCode)
+                        }
+                        window.location.href = `/login?invite_code=${encodeURIComponent(inviteCode)}`
+                      }}
+                    >
+                      Đăng nhập
                     </Button>
                     <Button variant="outline" asChild>
                       <Link href="/register">Tạo tài khoản</Link>

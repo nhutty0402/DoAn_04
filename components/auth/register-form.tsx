@@ -83,10 +83,10 @@ export function RegisterForm({ onClose }: RegisterFormProps) {
       onClose()
     } catch (error: any) {
       console.error("❌ Lỗi đăng ký:", error)
-      
+
       // Hiển thị message lỗi từ API hoặc error message
       const errorMessage = error.message || "Có lỗi xảy ra khi tạo tài khoản"
-      
+
       toast({
         title: "Lỗi đăng ký",
         description: errorMessage,
@@ -103,10 +103,16 @@ export function RegisterForm({ onClose }: RegisterFormProps) {
         <Button variant="ghost" size="icon" className="absolute right-2 top-2" onClick={onClose}>
           <X className="h-4 w-4" />
         </Button>
-        <CardTitle className="text-2xl font-[family-name:var(--font-space-grotesk)]">Đăng Ký</CardTitle>
-        <CardDescription className="font-[family-name:var(--font-dm-sans)]">
-          Tạo tài khoản mới để bắt đầu lập kế hoạch du lịch
-        </CardDescription>
+        <div className="text-center">
+  <CardTitle className="text-2xl font-[family-name:var(--font-space-grotesk)]">
+    Đăng Ký
+  </CardTitle>
+
+  <CardDescription className="font-[family-name:var(--font-dm-sans)]">
+    Tạo tài khoản mới để bắt đầu lập kế hoạch du lịch
+  </CardDescription>
+</div>
+
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">

@@ -135,12 +135,12 @@ export default function HomePage() {
             <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto font-[family-name:var(--font-dm-sans)]">
               Tìm cảm hứng từ hàng ngàn chuyến đi được chia sẻ bởi cộng đồng du lịch Việt Nam
             </p>
-            <Link href="/feed">
+            {/* <Link href="/feed">
               <Button size="lg" variant="outline" className="bg-white hover:bg-gray-50 text-primary border-primary">
                 <Eye className="h-5 w-5 mr-2" />
                 Xem Bản Tin Công Khai
               </Button>
-            </Link>
+            </Link> */}
           </motion.div>
         </div>
       </section>

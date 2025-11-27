@@ -173,9 +173,20 @@ export function MembersTab({ members: initialMembers, tripId, currentUserId }: M
       )
       const data = res.data || {}
       if (data && (data.invite_link || data.ma_code)) {
-        const frontendOrigin = typeof window !== "undefined" ? window.location.origin : ""
-        const shareLink =
-          data?.ma_code && frontendOrigin ? `${frontendOrigin}/invite/${data.ma_code}` : data?.invite_link || ""
+        // ✅ Ưu tiên dùng link từ backend, nhưng đảm bảo dùng /invite/ thay vì /join/
+        // Nếu không có, mới tự tạo với domain production
+        const productionDomain = "https://do-an-04.vercel.app"
+        let shareLink = data?.invite_link || ""
+        
+        // ✅ Nếu backend trả về link với /join/, thay thế thành /invite/
+        if (shareLink && shareLink.includes("/join/")) {
+          shareLink = shareLink.replace("/join/", "/invite/")
+        }
+        
+        // ✅ Nếu không có link từ backend, tự tạo với /invite/
+        if (!shareLink && data?.ma_code) {
+          shareLink = `${productionDomain}/invite/${data.ma_code}`
+        }
 
         setInviteInfo({
           ma_code: data.ma_code || "",

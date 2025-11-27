@@ -141,7 +141,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -167,6 +167,63 @@ export function LoginForm({ onClose }: LoginFormProps) {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const { toast } = useToast()
+
+  // ✅ Lấy mã mời từ query param hoặc localStorage
+  const getInviteCode = () => {
+    if (typeof window === "undefined") return null
+    
+    // Lấy từ query param trong URL
+    const urlParams = new URLSearchParams(window.location.search)
+    const fromQuery = urlParams.get("invite_code")
+    
+    // Lấy từ localStorage
+    const fromStorage = localStorage.getItem("pending_invite_code")
+    
+    return fromQuery || fromStorage || null
+  }
+
+  
+  // ✅ Hàm gửi yêu cầu tham gia chuyến đi
+  const handleJoinTrip = async (inviteCode: string, token: string) => {
+    try {
+      const response = await axios.post(
+        `https://travel-planner-imdw.onrender.com/api/moi-thanh-vien/tham-gia/${encodeURIComponent(inviteCode)}`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      // ✅ Xóa mã mời khỏi localStorage sau khi gửi thành công
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("pending_invite_code")
+      }
+
+      toast({
+        title: "Thành công!",
+        description: response.data?.message || "Đã gửi yêu cầu tham gia chuyến đi. Vui lòng chờ chủ chuyến đi duyệt.",
+      })
+
+      return response.data
+    } catch (error: any) {
+      console.error("❌ Lỗi khi gửi yêu cầu tham gia:", error)
+      // ✅ Xóa mã mời nếu có lỗi (tránh lặp lại)
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("pending_invite_code")
+      }
+      
+      const errorMessage = error.response?.data?.message || error.message || "Không thể gửi yêu cầu tham gia"
+      toast({
+        title: "Lỗi",
+        description: errorMessage,
+        variant: "destructive",
+      })
+      throw error
+    }
+  }
 
   // Original login submit handler
   const handleSubmit = async (e: React.FormEvent) => {
@@ -198,14 +255,33 @@ export function LoginForm({ onClose }: LoginFormProps) {
 
       localStorage.setItem("travelplan_user", JSON.stringify(data))
 
-      toast({
-        title: "Đăng nhập thành công!",
-        description: `Chào mừng bạn trở lại TravelPlan`,
-      })
-
-
-
-      window.location.href = "/dashboard"
+      // ✅ Kiểm tra có mã mời không, nếu có thì gửi yêu cầu tham gia
+      const inviteCode = getInviteCode()
+      if (inviteCode && data.token) {
+        try {
+          await handleJoinTrip(inviteCode, data.token)
+          // Sau khi gửi yêu cầu thành công, chuyển đến dashboard
+          toast({
+            title: "Đăng nhập thành công!",
+            description: `Chào mừng bạn trở lại TravelPlan`,
+          })
+          window.location.href = "/dashboard"
+        } catch (error) {
+          // Nếu gửi yêu cầu thất bại, vẫn chuyển đến dashboard (đã đăng nhập thành công)
+          toast({
+            title: "Đăng nhập thành công!",
+            description: `Chào mừng bạn trở lại TravelPlan`,
+          })
+          window.location.href = "/dashboard"
+        }
+      } else {
+        // Không có mã mời, chuyển đến dashboard bình thường
+        toast({
+          title: "Đăng nhập thành công!",
+          description: `Chào mừng bạn trở lại TravelPlan`,
+        })
+        window.location.href = "/dashboard"
+      }
     } catch (error: any) {
       toast({
         title: "Lỗi đăng nhập",

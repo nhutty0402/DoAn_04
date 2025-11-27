@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -25,20 +25,55 @@ interface AddExpenseModalProps {
 }
 
 export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpenseModalProps) {
+  // ✅ Lấy hình thức chia đã lưu từ localStorage (nếu có)
+  const getSavedSplitType = (): "equal" | "shares" | "percent" => {
+    if (typeof window === "undefined") return "equal"
+    const saved = localStorage.getItem(`expense_split_preference_${tripId}`)
+    if (saved && ["equal", "shares", "percent"].includes(saved)) {
+      return saved as "equal" | "shares" | "percent"
+    }
+    return "equal"
+  }
+
+  // Tìm chủ chuyến đi (owner) hoặc lấy member đầu tiên
+  const tripOwner = members.find((m) => m.role === "owner" || m.vai_tro === "owner") || members[0]
+
   const [formData, setFormData] = useState({
     tenChiPhi: "",
     soTien: "",
     loaiChiPhi: "ăn uống",
-    nguoiTraId: members[0]?.id || "",
+    nguoiTraId: tripOwner?.id || "",
     ghiChu: "",
-    hinhThucChia: "equal",
+    hinhThucChia: getSavedSplitType(), // ✅ Sử dụng hình thức đã lưu
     thanhVienThamGia: members.map((m) => m.id),
   })
   const [customShares, setCustomShares] = useState<Record<string, number>>({})
   const [customPercents, setCustomPercents] = useState<Record<string, number>>({})
   const [isLoading, setIsLoading] = useState(false)
+  const [isFirstTime, setIsFirstTime] = useState(() => {
+    if (typeof window === "undefined") return true
+    return !localStorage.getItem(`expense_split_preference_${tripId}`)
+  })
   const { toast } = useToast()
   const router = useRouter()
+
+  // ✅ Kiểm tra xem đây có phải lần đầu tiên thêm chi phí không
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const saved = localStorage.getItem(`expense_split_preference_${tripId}`)
+    setIsFirstTime(!saved)
+  }, [tripId])
+
+  // ✅ Cập nhật nguoiTraId khi members thay đổi (chỉ set nếu chưa có)
+  useEffect(() => {
+    if (members.length > 0 && !formData.nguoiTraId) {
+      // Tìm chủ chuyến đi (owner) hoặc lấy member đầu tiên
+      const owner = members.find((m) => m.role === "owner" || m.vai_tro === "owner") || members[0]
+      if (owner?.id) {
+        setFormData((prev) => ({ ...prev, nguoiTraId: owner.id }))
+      }
+    }
+  }, [members, formData.nguoiTraId])
 
   const expenseTypes = [
     { value: "ăn uống", label: "Ăn uống" },
@@ -138,43 +173,117 @@ export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpen
       }
 
       // Map hinh_thuc_chia: equal -> "equal", shares -> "custom", percent -> "percent"
-      let hinhThucChia = formData.hinhThucChia
-      if (hinhThucChia === "shares") {
-        hinhThucChia = "custom"
-      }
+      // Lưu ý: formData.hinhThucChia có thể là "equal" | "shares" | "percent"
+      // Nhưng API cần "equal" | "custom" | "percent"
+      let hinhThucChia: "equal" | "custom" | "percent" = formData.hinhThucChia === "shares" ? "custom" : formData.hinhThucChia
 
-      // Prepare thanh_vien array based on split type
+      // ✅ Prepare thanh_vien array based on split type
+      // Backend yêu cầu tất cả trường hợp đều phải là array các object có nguoi_dung_id
       let thanhVien: any[] = []
       
       if (formData.hinhThucChia === "equal") {
-        // For equal split, just send member IDs
+        // ✅ For equal split, vẫn phải gửi object với nguoi_dung_id
         thanhVien = formData.thanhVienThamGia.map((memberId) => {
-          const member = members.find((m) => m.id === memberId)
-          return member?.nguoi_dung_id || member?.id || memberId
+          const member = members.find((m) => m.id === memberId || String(m.id) === String(memberId))
+          
+          if (!member) {
+            console.error(`❌ Không tìm thấy member với id: ${memberId}`, { members, memberId })
+            throw new Error(`Không tìm thấy thông tin thành viên với ID: ${memberId}`)
+          }
+          
+          // ✅ Ưu tiên lấy nguoi_dung_id từ member, nếu không có thì parse từ id
+          let nguoiDungId = member.nguoi_dung_id
+          if (!nguoiDungId && member.id) {
+            nguoiDungId = Number.parseInt(String(member.id))
+          }
+          if (!nguoiDungId) {
+            nguoiDungId = Number.parseInt(String(memberId))
+          }
+          
+          // ✅ Validate nguoi_dung_id không được null/undefined/NaN
+          if (!nguoiDungId || isNaN(nguoiDungId) || nguoiDungId <= 0) {
+            console.error(`❌ Invalid nguoi_dung_id:`, { member, memberId, nguoiDungId })
+            throw new Error(`Không tìm thấy nguoi_dung_id hợp lệ cho thành viên: ${member.name || memberId}`)
+          }
+          
+          return {
+            nguoi_dung_id: nguoiDungId,
+          }
         })
       } else if (formData.hinhThucChia === "shares") {
-        // For shares/custom split, send objects with nguoi_dung_id and ti_le
+        // ✅ For shares/custom split, send objects with nguoi_dung_id and ti_le
         thanhVien = formData.thanhVienThamGia.map((memberId) => {
-          const member = members.find((m) => m.id === memberId)
-          const nguoiDungId = member?.nguoi_dung_id || member?.id || memberId
+          const member = members.find((m) => m.id === memberId || String(m.id) === String(memberId))
+          
+          if (!member) {
+            console.error(`❌ Không tìm thấy member với id: ${memberId}`, { members, memberId })
+            throw new Error(`Không tìm thấy thông tin thành viên với ID: ${memberId}`)
+          }
+          
+          // ✅ Ưu tiên lấy nguoi_dung_id từ member, nếu không có thì parse từ id
+          let nguoiDungId = member.nguoi_dung_id
+          if (!nguoiDungId && member.id) {
+            nguoiDungId = Number.parseInt(String(member.id))
+          }
+          if (!nguoiDungId) {
+            nguoiDungId = Number.parseInt(String(memberId))
+          }
+          
+          // ✅ Validate nguoi_dung_id không được null/undefined/NaN
+          if (!nguoiDungId || isNaN(nguoiDungId) || nguoiDungId <= 0) {
+            console.error(`❌ Invalid nguoi_dung_id:`, { member, memberId, nguoiDungId })
+            throw new Error(`Không tìm thấy nguoi_dung_id hợp lệ cho thành viên: ${member.name || memberId}`)
+          }
+          
           return {
             nguoi_dung_id: nguoiDungId,
             ti_le: customShares[memberId] || 1,
           }
         })
       } else if (formData.hinhThucChia === "percent") {
-        // For percent split, send objects with nguoi_dung_id and phan_tram
+        // ✅ For percent split, send objects with nguoi_dung_id and phan_tram
         thanhVien = formData.thanhVienThamGia.map((memberId) => {
-          const member = members.find((m) => m.id === memberId)
-          const nguoiDungId = member?.nguoi_dung_id || member?.id || memberId
+          const member = members.find((m) => m.id === memberId || String(m.id) === String(memberId))
+          
+          if (!member) {
+            console.error(`❌ Không tìm thấy member với id: ${memberId}`, { members, memberId })
+            throw new Error(`Không tìm thấy thông tin thành viên với ID: ${memberId}`)
+          }
+          
+          // ✅ Ưu tiên lấy nguoi_dung_id từ member, nếu không có thì parse từ id
+          let nguoiDungId = member.nguoi_dung_id
+          if (!nguoiDungId && member.id) {
+            nguoiDungId = Number.parseInt(String(member.id))
+          }
+          if (!nguoiDungId) {
+            nguoiDungId = Number.parseInt(String(memberId))
+          }
+          
+          // ✅ Validate nguoi_dung_id không được null/undefined/NaN
+          if (!nguoiDungId || isNaN(nguoiDungId) || nguoiDungId <= 0) {
+            console.error(`❌ Invalid nguoi_dung_id:`, { member, memberId, nguoiDungId })
+            throw new Error(`Không tìm thấy nguoi_dung_id hợp lệ cho thành viên: ${member.name || memberId}`)
+          }
+          
           return {
             nguoi_dung_id: nguoiDungId,
             phan_tram: customPercents[memberId] || 0,
           }
         })
       }
+      
+      // ✅ Validate thanh_vien không được rỗng và tất cả đều có nguoi_dung_id hợp lệ
+      if (thanhVien.length === 0) {
+        throw new Error("Phải chọn ít nhất một thành viên tham gia")
+      }
+      
+      const invalidMembers = thanhVien.filter(v => !v.nguoi_dung_id || isNaN(v.nguoi_dung_id))
+      if (invalidMembers.length > 0) {
+        console.error("❌ Invalid members:", invalidMembers)
+        throw new Error("Có thành viên không có nguoi_dung_id hợp lệ")
+      }
 
-      // Prepare API payload
+      // ✅ Prepare API payload
       const apiPayload = {
         chuyen_di_id: Number.parseInt(tripId),
         so_tien: Number.parseFloat(formData.soTien),
@@ -184,6 +293,23 @@ export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpen
         tien_te: "VND",
         hinh_thuc_chia: hinhThucChia,
         thanh_vien: thanhVien,
+      }
+
+      // ✅ Log để debug
+      console.log("🔑 Token từ cookie:", token)
+      console.log("📦 API Payload:", JSON.stringify(apiPayload, null, 2))
+      console.log("👥 Members data:", members)
+      console.log("📋 Thanh vien array:", thanhVien)
+
+      // ✅ Validate token
+      if (!token || token === "null" || token === "undefined") {
+        toast({
+          title: "Lỗi xác thực",
+          description: "Token không hợp lệ. Vui lòng đăng nhập lại",
+          variant: "destructive",
+        })
+        router.replace("/login")
+        return
       }
 
       // Call API to create expense
@@ -198,7 +324,8 @@ export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpen
         }
       )
 
-      const createdExpense = response.data
+      const responseData = response.data
+      const createdExpense = responseData?.chi_phi || responseData
 
       // Calculate split details for local state
       const chiTietChia = calculateSplit()
@@ -215,9 +342,22 @@ export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpen
         _api: createdExpense,
       })
 
+      // ✅ Lưu hình thức chia vào localStorage sau khi thêm thành công
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`expense_split_preference_${tripId}`, formData.hinhThucChia)
+        setIsFirstTime(false)
+      }
+
+      // ✅ Hiển thị thông báo với thông tin từ API response
+      const message = responseData?.message || "Chi phí mới đã được thêm và chia sẻ"
+      const nganSachConLai = responseData?.ngan_sach_con_lai
+      
       toast({
-        title: "Đã thêm chi phí",
-        description: "Chi phí mới đã được thêm và chia sẻ",
+        title: "Thành công",
+        description: nganSachConLai !== undefined 
+          ? `${message}. Ngân sách còn lại: ${Number(nganSachConLai).toLocaleString("vi-VN")} VNĐ`
+          : message,
+        variant: nganSachConLai !== undefined && nganSachConLai < 0 ? "destructive" : "default",
       })
 
       onClose()
@@ -323,11 +463,18 @@ export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpen
                     onChange={(e) => handleChange("nguoiTraId", e.target.value)}
                     className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground"
                   >
-                    {members.map((member) => (
-                      <option key={member.id} value={member.id}>
-                        {member.name}
+                    {members
+                      .filter((member) => member.role === "owner" || member.vai_tro === "owner")
+                      .map((member) => (
+                        <option key={member.id} value={member.id}>
+                          {member.name}
+                        </option>
+                      ))}
+                    {members.filter((member) => member.role === "owner" || member.vai_tro === "owner").length === 0 && (
+                      <option value={members[0]?.id || ""} disabled={!members[0]}>
+                        {members[0]?.name || "Chưa có thành viên"}
                       </option>
-                    ))}
+                    )}
                   </select>
                 </div>
               </div>
@@ -345,13 +492,56 @@ export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpen
 
               {/* Split Configuration */}
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Cách chia chi phí</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Cách chia chi phí</h3>
+                  {!isFirstTime && (
+                    <p className="text-xs text-muted-foreground">
+                      Đã lưu: {formData.hinhThucChia === "equal" ? "Chia đều" : formData.hinhThucChia === "shares" ? "Theo phần" : "Theo %"}
+                    </p>
+                  )}
+                </div>
+                {isFirstTime && (
+                  <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-md">
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      <strong>Lưu ý:</strong> Bạn chỉ được chọn cách chia 1 lần trong lần thêm chi phí đầu tiên. Hình thức chia này sẽ được lưu và áp dụng cho các chi phí tiếp theo.
+                    </p>
+                  </div>
+                )}
 
-                <Tabs value={formData.hinhThucChia} onValueChange={(value) => handleChange("hinhThucChia", value)}>
+                <Tabs 
+                  value={formData.hinhThucChia} 
+                  onValueChange={(value) => {
+                    // ✅ Chỉ cho phép đổi nếu là lần đầu tiên
+                    if (isFirstTime) {
+                      handleChange("hinhThucChia", value)
+                    } else {
+                      toast({
+                        title: "Thông báo",
+                        description: "Hình thức chia đã được lưu. Bạn có thể đổi trong lần thêm chi phí đầu tiên.",
+                        variant: "default",
+                      })
+                    }
+                  }}
+                >
                   <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="equal">Chia đều</TabsTrigger>
-                    <TabsTrigger value="shares">Theo phần</TabsTrigger>
-                    <TabsTrigger value="percent">Theo %</TabsTrigger>
+                    <TabsTrigger 
+                      value="equal"
+                      disabled={!isFirstTime && formData.hinhThucChia !== "equal"}
+                    >
+                      Chia đều
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="shares"
+                      disabled={!isFirstTime && formData.hinhThucChia !== "shares"}
+                    >
+                      Theo phần
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="percent"
+                      disabled={!isFirstTime && formData.hinhThucChia !== "percent"}
+                    >
+                      Theo %
+                    </TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="equal" className="space-y-4">
