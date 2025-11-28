@@ -236,15 +236,6 @@ const buildItinerary = (itinerary: ItineraryDayAPI[]): any[] =>
       location: activity.ten_dia_diem || "Địa điểm chưa cập nhật",
       duration: formatTimeRange(activity.thoi_gian_bat_dau, activity.thoi_gian_ket_thuc),
       type: inferActivityType(activity.loai_dia_diem),
-      // Chi tiết đầy đủ từ API
-      dia_diem_id: activity.dia_diem_id,
-      vi_do: activity.vi_do,
-      kinh_do: activity.kinh_do,
-      ghi_chu: activity.ghi_chu,
-      loai_dia_diem: activity.loai_dia_diem,
-      google_place_id: activity.google_place_id,
-      thoi_gian_bat_dau: activity.thoi_gian_bat_dau,
-      thoi_gian_ket_thuc: activity.thoi_gian_ket_thuc,
     }))
 
     const titleParts = [`Ngày ${index + 1}`]
@@ -255,10 +246,6 @@ const buildItinerary = (itinerary: ItineraryDayAPI[]): any[] =>
       title: titleParts.join(": "),
       date: formatDateDisplay(day.ngay),
       activities,
-      // Chi tiết đầy đủ từ API
-      lich_trinh_ngay_id: day.lich_trinh_ngay_id,
-      ngay: day.ngay,
-      ghi_chu: day.ghi_chu,
     }
   })
 
@@ -442,6 +429,7 @@ export default function PublicTripDetailPage() {
               <Link href="/feed">
                 <Button variant="ghost" size="sm" className="text-blue-600 hover:bg-blue-50">
                   <ArrowLeft className="h-4 w-4 mr-2" />
+                  Quay lại
                 </Button>
               </Link>
               <div className="text-sm text-gray-600">
@@ -452,7 +440,7 @@ export default function PublicTripDetailPage() {
                 <span className="text-gray-900">{trip.title}</span>
               </div>
             </div>
-            {/* <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -476,7 +464,7 @@ export default function PublicTripDetailPage() {
                 <Download className="h-4 w-4 mr-2" />
                 Tải PDF
               </Button>
-            </div> */}
+            </div>
           </div>
         </div>
       </div>
@@ -490,15 +478,15 @@ export default function PublicTripDetailPage() {
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
               <div className="flex items-center gap-2 mb-4">
                 {trip.isVerified && (
-                  // thích
                   <Badge className="bg-green-500 text-white">
-                    <Star className="h-3 w-3 mr-1" />              
+                    <Star className="h-3 w-3 mr-1" />
+                    Xác thực
                   </Badge>
                 )}
-                {/* <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
+                <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
                   <Eye className="h-3 w-3 mr-1" />
                   {trip.viewCount.toLocaleString()} lượt xem
-                </Badge> */}
+                </Badge>
               </div>
               <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">{trip.title}</h1>
               <p className="text-xl text-white/90 mb-6 max-w-3xl">{trip.description}</p>
@@ -669,17 +657,17 @@ export default function PublicTripDetailPage() {
                   </div>
                 </div>
                 <p className="text-sm text-gray-600 mb-4 line-clamp-4">{trip.owner.bio}</p>
-                {/* <Button
+                <Button
                   variant="outline"
                   className="w-full border-blue-200 text-blue-600 hover:bg-blue-50 bg-transparent"
                 >
                   Xem thêm chuyến đi
-                </Button> */}
+                </Button>
               </CardContent>
             </Card>
 
-            {/* hành động */}
-            {/* <Card>
+            {/* Quick Actions */}
+            <Card>
               <CardHeader>
                 <CardTitle>Hành động</CardTitle>
               </CardHeader>
@@ -706,7 +694,7 @@ export default function PublicTripDetailPage() {
                   {isLiked ? "Bỏ thích" : "Yêu thích"}
                 </Button>
               </CardContent>
-            </Card> */}
+            </Card>
 
             {/* Trip Stats */}
             <Card>
@@ -731,13 +719,13 @@ export default function PublicTripDetailPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Thông tin chuyến đi</CardTitle>
+                <CardTitle>Thông tin API</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
-                {/* <div className="flex justify-between">
+                <div className="flex justify-between">
                   <span className="text-gray-600">ID chuyến đi:</span>
                   <span className="font-semibold">{trip.rawInfo.chuyen_di_id}</span>
-                </div> */}
+                </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Điểm xuất phát:</span>
                   <span className="font-semibold">{trip.rawInfo.dia_diem_xuat_phat || "Chưa cập nhật"}</span>
@@ -754,18 +742,18 @@ export default function PublicTripDetailPage() {
                   <span className="text-gray-600">Chế độ:</span>
                   <span className="font-semibold">{trip.rawInfo.cong_khai ? "Công khai" : "Riêng tư"}</span>
                 </div>
-                {/* <div className="flex justify-between">
+                <div className="flex justify-between">
                   <span className="text-gray-600">Tiền tệ:</span>
                   <span className="font-semibold">{trip.rawInfo.tien_te || "VNĐ"}</span>
-                </div> */}
+                </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Tổng ngân sách:</span>
                   <span className="font-semibold">{formatCurrencyValue(trip.rawInfo.tong_ngan_sach, trip.rawInfo.tien_te)}</span>
                 </div>
-                {/* <div className="flex justify-between">
+                <div className="flex justify-between">
                   <span className="text-gray-600">Chủ sở hữu ID:</span>
                   <span className="font-semibold">{trip.rawInfo.chu_so_huu_id}</span>
-                </div> */}
+                </div>
               </CardContent>
             </Card>
 

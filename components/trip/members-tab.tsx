@@ -177,12 +177,12 @@ export function MembersTab({ members: initialMembers, tripId, currentUserId }: M
         // Nếu không có, mới tự tạo với domain production
         const productionDomain = "https://do-an-04.vercel.app"
         let shareLink = data?.invite_link || ""
-        
+
         // ✅ Nếu backend trả về link với /join/, thay thế thành /invite/
         if (shareLink && shareLink.includes("/join/")) {
           shareLink = shareLink.replace("/join/", "/invite/")
         }
-        
+
         // ✅ Nếu không có link từ backend, tự tạo với /invite/
         if (!shareLink && data?.ma_code) {
           shareLink = `${productionDomain}/invite/${data.ma_code}`
@@ -309,10 +309,10 @@ export function MembersTab({ members: initialMembers, tripId, currentUserId }: M
       const list = Array.isArray(res.data?.yeu_cau_tham_gia)
         ? res.data.yeu_cau_tham_gia
         : Array.isArray(res.data?.data)
-        ? res.data.data
-        : Array.isArray(res.data)
-        ? res.data
-        : []
+          ? res.data.data
+          : Array.isArray(res.data)
+            ? res.data
+            : []
       setPendingList(list)
     } catch (err: any) {
       setPendingList([])
@@ -357,7 +357,7 @@ export function MembersTab({ members: initialMembers, tripId, currentUserId }: M
             Thành Viên Chuyến Đi
           </h2>
           <p className="text-muted-foreground font-[family-name:var(--font-dm-sans)]">
-          Chỉ chủ chuyến đi mới có thể mời và quản lý thành viên
+            Chỉ chủ chuyến đi mới có thể mời và quản lý thành viên
           </p>
         </div>
         {canManageMembers && (
@@ -380,7 +380,7 @@ export function MembersTab({ members: initialMembers, tripId, currentUserId }: M
       )} */}
 
       {/* hiển thị thành viên ra bên ngoài */}
-      
+
       {/* <div className="grid gap-4">
         {members.map((member) => (
           <Card key={member.id}>
@@ -506,19 +506,19 @@ export function MembersTab({ members: initialMembers, tripId, currentUserId }: M
           </CardContent>
         </Card>
         <Card>
-         <CardContent
-           className="p-4 text-center cursor-pointer rounded-lg transition select-none"
-           onClick={handleShowFriends}
-         >
-           <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
-             <div className="w-3 h-3 bg-green-500 rounded-full" />
-           </div>
-           {/* đếm bạn b */}
-           {/* <p className="text-2xl font-bold text-foreground">
+          <CardContent
+            className="p-4 text-center cursor-pointer rounded-lg transition select-none"
+            onClick={handleShowFriends}
+          >
+            <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
+              <div className="w-3 h-3 bg-green-500 rounded-full" />
+            </div>
+            {/* đếm bạn b */}
+            {/* <p className="text-2xl font-bold text-foreground">
              {members.filter((m) => m.status === "accepted").length}
            </p> */}
-           <p className="text-sm text-muted-foreground">Mời bạn bè tham gia</p>
-         </CardContent>
+            <p className="text-sm text-muted-foreground">Mời bạn bè tham gia</p>
+          </CardContent>
         </Card>
         <Card>
           <CardContent
@@ -548,7 +548,7 @@ export function MembersTab({ members: initialMembers, tripId, currentUserId }: M
                   const isRealFriend = ["accepted", "ban_be", "friend"].includes(String(friend.trang_thai).toLowerCase())
                   return (
                     <div key={friend.id} className="flex items-center gap-3 border-b p-2 pb-3 last:border-0">
-                      <img src={friend.avatar_url || "/placeholder-user.jpg"} alt={friend.ho_ten} className="w-8 h-8 rounded-full"/>
+                      <img src={friend.avatar_url || "/placeholder-user.jpg"} alt={friend.ho_ten} className="w-8 h-8 rounded-full" />
                       <div className="flex-1">
                         <div className="font-medium">{friend.ho_ten}</div>
                         <div className="text-xs text-muted-foreground">{friend.email}</div>
@@ -558,50 +558,50 @@ export function MembersTab({ members: initialMembers, tripId, currentUserId }: M
                       </div>
                       {isRealFriend ? (
                         <Button
-  size="sm"
-  onClick={async () => {
-    try {
-      const token = Cookies.get('token')
-      if (!token || token === 'null' || token === 'undefined') {
-        throw new Error('Vui lòng đăng nhập lại')
-      }
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              const token = Cookies.get('token')
+                              if (!token || token === 'null' || token === 'undefined') {
+                                throw new Error('Vui lòng đăng nhập lại')
+                              }
 
-      // ✅ Lấy đúng ID người bạn cần mời (nguoi_dung_id trong danh sách bạn bè)
-      const banBeId = (friend as any).nguoi_dung_id
-      const chuyenDiId = tripId
+                              // ✅ Lấy đúng ID người bạn cần mời (nguoi_dung_id trong danh sách bạn bè)
+                              const banBeId = (friend as any).nguoi_dung_id
+                              const chuyenDiId = tripId
 
-      if (!chuyenDiId) throw new Error('Thiếu chuyen_di_id (tripId) khi gửi lời mời')
-      if (!banBeId) throw new Error('Thiếu ban_be_id (ID người bạn) khi gửi lời mời')
+                              if (!chuyenDiId) throw new Error('Thiếu chuyen_di_id (tripId) khi gửi lời mời')
+                              if (!banBeId) throw new Error('Thiếu ban_be_id (ID người bạn) khi gửi lời mời')
 
-      const payload = { chuyen_di_id: chuyenDiId, ban_be_id: banBeId }
-      console.log('[InviteMember] payload gửi:', payload)
+                              const payload = { chuyen_di_id: chuyenDiId, ban_be_id: banBeId }
+                              console.log('[InviteMember] payload gửi:', payload)
 
-      const res = await axios.post(
-        'https://travel-planner-imdw.onrender.com/api/moi-thanh-vien/moi-ban',
-        payload,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      )
+                              const res = await axios.post(
+                                'https://travel-planner-imdw.onrender.com/api/moi-thanh-vien/moi-ban',
+                                payload,
+                                {
+                                  headers: {
+                                    Authorization: `Bearer ${token}`,
+                                    'Content-Type': 'application/json'
+                                  }
+                                }
+                              )
 
-      const data = res.data
-      toast({
-        title: data?.message || 'Đã gửi lời mời tham gia chuyến đi',
-        description: `ID chuyến đi: ${data?.chuyen_di_id || '-'}, ID bạn bè: ${data?.ban_be_id || '-'}, trạng thái: ${data?.trang_thai || 'pending'}`
-      })
-    } catch (err: any) {
-      console.error('[InviteMember] error:', err?.response?.data || err)
-      const backendMessage = err?.response?.data?.message || err?.response?.data?.error
-      const message = backendMessage || err?.message || 'Lỗi khi gửi lời mời'
-      toast({ title: 'Lỗi gửi lời mời', description: message, variant: 'destructive' })
-    }
-  }}
->
-  Mời tham gia
-</Button>
+                              const data = res.data
+                              toast({
+                                title: data?.message || 'Đã gửi lời mời tham gia chuyến đi',
+                                description: `ID chuyến đi: ${data?.chuyen_di_id || '-'}, ID bạn bè: ${data?.ban_be_id || '-'}, trạng thái: ${data?.trang_thai || 'pending'}`
+                              })
+                            } catch (err: any) {
+                              console.error('[InviteMember] error:', err?.response?.data || err)
+                              const backendMessage = err?.response?.data?.message || err?.response?.data?.error
+                              const message = backendMessage || err?.message || 'Lỗi khi gửi lời mời'
+                              toast({ title: 'Lỗi gửi lời mời', description: message, variant: 'destructive' })
+                            }
+                          }}
+                        >
+                          Mời tham gia
+                        </Button>
                       ) : (
                         <Button size="sm" disabled variant="outline">Mời tham gia</Button>
                       )}
@@ -645,20 +645,20 @@ export function MembersTab({ members: initialMembers, tripId, currentUserId }: M
                         <div className="text-xs text-muted-foreground">Gửi lúc: {String(joinedAt)}</div>
                       )}
                     </div>
-                             {/* Nút hành động */}
-              <div className="flex items-center gap-2">
-              <Button
-                  size="sm"
-                  className="bg-[#b3f0f5] hover:bg-[#9be8ef] text-blue-900 shadow-md hover:shadow-lg transition-all duration-200"
-                  onClick={() => handleApproveMember(Number(id), name)}
-                >
-                  Duyệt
-                </Button>
-              </div>
+                    {/* Nút hành động */}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        className="bg-[#b3f0f5] hover:bg-[#9be8ef] text-blue-900 shadow-md hover:shadow-lg transition-all duration-200"
+                        onClick={() => handleApproveMember(Number(id), name)}
+                      >
+                        Duyệt
+                      </Button>
+                    </div>
                   </div>
                 )
               })}
-              
+
             </div>
           )}
         </DialogContent>

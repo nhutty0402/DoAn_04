@@ -4,7 +4,7 @@ import { Space_Grotesk, DM_Sans } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { Toaster } from "@/components/ui/toaster"
 import { ThemeProvider } from "@/components/theme-provider"
-import { ToastNotifications } from "@/components/notifications/toast-notifications"
+// import { ToastNotifications } from "@/components/notifications/toast-notifications"
 import { Suspense } from "react"
 import "./globals.css"
 
@@ -39,9 +39,9 @@ export default function RootLayout({
           <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
             {children}
             <Toaster />
-            <ToastNotifications />
           </ThemeProvider>
         </Suspense>
+        {/* <ToastNotifications /> */}
         <Analytics />
       </body>
     </html>

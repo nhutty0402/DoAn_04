@@ -33,16 +33,20 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
     ten_chuyen_di: "",
     mo_ta: "",
     dia_diem_xuat_phat: "",
+    dia_diem_den: "",
     ngay_bat_dau: "",
     ngay_ket_thuc: "",
     tien_te: "VND",
     trang_thai: "planned",
     cong_khai: "0", // "0" = riêng tư, "1" = công khai (string for Select)
     toaDo: null as { lat: number; lng: number } | null,
+    toaDoDen: null as { lat: number; lng: number } | null,
   })
   const [isLoading, setIsLoading] = useState(false)
   const [locationSuggestions, setLocationSuggestions] = useState<any[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [locationSuggestionsDen, setLocationSuggestionsDen] = useState<any[]>([])
+  const [showSuggestionsDen, setShowSuggestionsDen] = useState(false)
   const { toast } = useToast()
 
   const handleChange = (field: string, value: string) => {
@@ -66,6 +70,27 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
       setShowSuggestions(mockSuggestions.length > 0)
     } else if (field === "dia_diem_xuat_phat" && value.length <= 2) {
       setShowSuggestions(false)
+    } else if (field === "dia_diem_den" && value.length > 2) {
+      // Simulate Google Places API search for destination
+      const mockSuggestions = [
+        { id: 1, name: "Đà Nẵng, Việt Nam", address: "Đà Nẵng, Việt Nam", lat: 16.0544, lng: 108.2022 },
+        { id: 2, name: "Hội An, Quảng Nam", address: "Hội An, Quảng Nam, Việt Nam", lat: 15.8801, lng: 108.338 },
+        { id: 3, name: "Bà Nà Hills, Đà Nẵng", address: "Bà Nà Hills, Đà Nẵng, Việt Nam", lat: 15.9969, lng: 107.9953 },
+        { id: 4, name: "Cầu Rồng, Đà Nẵng", address: "Cầu Rồng, Đà Nẵng, Việt Nam", lat: 16.0608, lng: 108.2277 },
+        { id: 5, name: "Bãi biển Mỹ Khê", address: "Bãi biển Mỹ Khê, Đà Nẵng, Việt Nam", lat: 16.0471, lng: 108.2425 },
+        { id: 6, name: "Hà Nội, Việt Nam", address: "Hà Nội, Việt Nam", lat: 21.0285, lng: 105.8542 },
+        { id: 7, name: "TP. Hồ Chí Minh, Việt Nam", address: "TP. Hồ Chí Minh, Việt Nam", lat: 10.8231, lng: 106.6297 },
+        { id: 8, name: "Huế, Thừa Thiên Huế", address: "Huế, Thừa Thiên Huế, Việt Nam", lat: 16.4637, lng: 107.5909 },
+      ].filter(
+        (place) =>
+          place.name.toLowerCase().includes(value.toLowerCase()) ||
+          place.address.toLowerCase().includes(value.toLowerCase()),
+      )
+
+      setLocationSuggestionsDen(mockSuggestions)
+      setShowSuggestionsDen(mockSuggestions.length > 0)
+    } else if (field === "dia_diem_den" && value.length <= 2) {
+      setShowSuggestionsDen(false)
     }
   }
 
@@ -77,6 +102,16 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
     }))
     setShowSuggestions(false)
     setLocationSuggestions([])
+  }
+
+  const handleLocationSelectDen = (location: any) => {
+    setFormData((prev) => ({
+      ...prev,
+      dia_diem_den: location.name,
+      toaDoDen: { lat: location.lat, lng: location.lng },
+    }))
+    setShowSuggestionsDen(false)
+    setLocationSuggestionsDen([])
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -119,6 +154,7 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
         ten_chuyen_di: formData.ten_chuyen_di,
         mo_ta: formData.mo_ta || "",
         dia_diem_xuat_phat: formData.dia_diem_xuat_phat,
+        dia_diem_den: formData.dia_diem_den || "",
         ngay_bat_dau: formData.ngay_bat_dau,
         ngay_ket_thuc: formData.ngay_ket_thuc,
         chu_so_huu_id: ownerId,
@@ -267,6 +303,44 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
                 )}
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="dia_diem_den">Điểm đến</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="dia_diem_den"
+                    type="text"
+                    placeholder="Tìm kiếm điểm đến..."
+                    value={formData.dia_diem_den}
+                    onChange={(e) => handleChange("dia_diem_den", e.target.value)}
+                    className="pl-10"
+                  />
+                  {showSuggestionsDen && (
+                    <div className="absolute top-full left-0 right-0 bg-card border border-border rounded-md shadow-lg z-10 max-h-48 overflow-y-auto">
+                      {locationSuggestionsDen.map((location) => (
+                        <button
+                          key={location.id}
+                          type="button"
+                          className="w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2"
+                          onClick={() => handleLocationSelectDen(location)}
+                        >
+                          <Map className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <div className="font-medium text-sm">{location.name}</div>
+                            <div className="text-xs text-muted-foreground">{location.address}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {formData.toaDoDen && (
+                  <p className="text-xs text-muted-foreground">
+                    📍 Tọa độ: {formData.toaDoDen.lat.toFixed(4)}, {formData.toaDoDen.lng.toFixed(4)}
+                  </p>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="ngay_bat_dau">Ngày bắt đầu</Label>
@@ -319,6 +393,7 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
                   <Select
                     value={formData.tien_te}
                     onValueChange={(val) => handleChange("tien_te", val)}
+                    disabled
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Chọn tiền tệ" />
@@ -329,7 +404,7 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
+                {/* <div className="space-y-2">
                <Label>Trạng thái</Label>
               <Select
               value={formData.trang_thai || "planned"}
@@ -343,10 +418,8 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
                   <SelectItem value="planned">Đang thực hiện</SelectItem>
                  </SelectContent>
                  </Select>
-                  </div>
-
-              </div>
-              <div className="space-y-2">
+                  </div> */}
+               <div className="space-y-2">
               <Label htmlFor="cong_khai">Chế độ hiển thị</Label>
               <Select
                 value={formData.cong_khai}
@@ -361,6 +434,8 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
               </SelectContent>
               </Select>
               </div>
+              </div>
+            
 
               <div className="flex gap-3 pt-4">
                 <Button type="button" variant="outline" onClick={onClose} className="flex-1 bg-transparent">
