@@ -128,14 +128,16 @@ export function EditTripModal({ trip, onClose, onSubmit }: EditTripModalProps) {
         className="bg-card rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
       >
         <Card className="border-0 shadow-none">
-          <CardHeader className="relative">
+          <CardHeader className="relative pb-1">
             <Button variant="ghost" size="icon" className="absolute right-2 top-2" onClick={onClose}>
               <X className="h-4 w-4" />
             </Button>
-            <CardTitle className="text-2xl font-[family-name:var(--font-space-grotesk)]">Chỉnh Sửa Chuyến Đi</CardTitle>
-            <CardDescription className="font-[family-name:var(--font-dm-sans)]">
+            <CardTitle className="text-2xl font-[family-name:var(--font-space-grotesk)] text-center block w-full">
+              Chỉnh Sửa Chuyến Đi
+            </CardTitle>
+            {/* <CardDescription className="font-[family-name:var(--font-dm-sans)]">
               Cập nhật thông tin chuyến đi của bạn
-            </CardDescription>
+            </CardDescription> */}
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -239,45 +241,45 @@ export function EditTripModal({ trip, onClose, onSubmit }: EditTripModalProps) {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-               <Label>Trạng thái</Label>
-              <Select
-              value={formData.trang_thai || "planned"}
-              onValueChange={(val) => handleChange("trang_thai", val)}
-               disabled // 🟦 không cho chỉnh
+                {/* <div className="space-y-2">
+                  <Label>Trạng thái</Label>
+                  <Select
+                    value={formData.trang_thai || "planned"}
+                    onValueChange={(val) => handleChange("trang_thai", val)}
+                    disabled // 🟦 không cho chỉnh
+                  >
+                    <SelectTrigger className="w-full opacity-70 cursor-not-allowed">
+                      <SelectValue placeholder="Đang thực hiện" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="planned">Đang thực hiện</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div> */}
+                 <div className="space-y-2">
+                <Label htmlFor="cong_khai">Chế độ hiển thị</Label>
+                <Select
+                  value={formData.cong_khai}
+                  onValueChange={(val) => handleChange("cong_khai", val)}
                 >
-               <SelectTrigger className="w-full opacity-70 cursor-not-allowed">
-                <SelectValue placeholder="Đang thực hiện" />
-                </SelectTrigger>
+                  <SelectTrigger id="cong_khai" className="w-full cong_khai">
+                    <SelectValue placeholder="Chọn chế độ hiển thị" />
+                  </SelectTrigger>
                   <SelectContent>
-                  <SelectItem value="planned">Đang thực hiện</SelectItem>
-                 </SelectContent>
-                 </Select>
-                  </div>
-
+                    <SelectItem value="1">Công khai</SelectItem>
+                    <SelectItem value="0">Riêng tư</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="space-y-2">
-              <Label htmlFor="cong_khai">Chế độ hiển thị</Label>
-              <Select
-                value={formData.cong_khai}
-               onValueChange={(val) => handleChange("cong_khai", val)}
-               >
-              <SelectTrigger id="cong_khai" className="w-full cong_khai">
-               <SelectValue placeholder="Chọn chế độ hiển thị" />
-              </SelectTrigger>
-              <SelectContent>
-              <SelectItem value="1">Công khai</SelectItem>
-              <SelectItem value="0">Riêng tư</SelectItem>
-              </SelectContent>
-              </Select>
               </div>
+            
 
               <div className="flex gap-3 pt-4">
                 <Button type="button" variant="outline" onClick={onClose} className="flex-1 bg-transparent">
                   Hủy
                 </Button>
                 <Button type="submit" className="flex-1 bg-primary hover:bg-primary/90" disabled={isLoading}>
-                  {isLoading ? "Đang tạo..." : "Tạo Chuyến Đi"}
+                  {isLoading ? "Đang tạo..." : "Cập nhật chuyến đi"}
                 </Button>
               </div>
             </form>

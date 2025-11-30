@@ -71,28 +71,28 @@
 //     try {
 //       const start = new Date(startDate)
 //       const end = new Date(endDate)
-      
+
 //       // Kiểm tra date hợp lệ
 //       if (isNaN(start.getTime()) || isNaN(end.getTime())) {
 //         return "Chưa xác định"
 //       }
-      
+
 //       // Đảm bảo tính toán đúng với timezone
 //       start.setHours(0, 0, 0, 0)
 //       end.setHours(0, 0, 0, 0)
-      
+
 //       const diffTime = end.getTime() - start.getTime()
 //       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1 // +1 để tính cả ngày cuối
-      
+
 //       if (diffDays <= 0) {
 //         return "1 ngày"
 //       }
-      
+
 //       const nights = diffDays - 1
 //       if (nights === 0) {
 //         return "1 ngày"
 //       }
-      
+
 //       return `${diffDays} ngày ${nights} đêm`
 //     } catch (error) {
 //       console.error("Lỗi khi tính duration:", error)
@@ -114,10 +114,10 @@
 //     const moTa = trip.mo_ta || ""
 //     const ngayBatDau = trip.ngay_bat_dau || new Date().toISOString().split("T")[0]
 //     const ngayKetThuc = trip.ngay_ket_thuc || ngayBatDau
-    
+
 //     const duration = calculateDuration(ngayBatDau, ngayKetThuc)
 //     const budget = formatBudget(trip.tong_ngan_sach || 0, trip.tien_te || "VNĐ")
-    
+
 //     // ✅ Tạo tags từ mo_ta (kiểm tra null/undefined trước)
 //     const tags: string[] = []
 //     if (moTa) {
@@ -203,7 +203,7 @@
 
 //       // Kiểm tra cấu trúc response
 //       const data = response.data?.danh_sach || response.data?.data || []
-      
+
 //       if (!Array.isArray(data)) {
 //         console.error("❌ Dữ liệu không hợp lệ từ API:", response.data)
 //         throw new Error("Dữ liệu không hợp lệ từ API")
@@ -222,14 +222,14 @@
 //           }
 //         })
 //         .filter((trip: DisplayTrip | null): trip is DisplayTrip => trip !== null)
-      
+
 //       setTrips(mappedTrips)
 //       setFilteredTrips(mappedTrips)
 //       console.log(`✅ Đã tải và map thành công ${mappedTrips.length} chuyến đi công khai`)
 //     } catch (error: any) {
 //       console.error("❌ Lỗi khi tải danh sách chuyến đi:", error)
 //       setError("Không thể tải danh sách chuyến đi. Vui lòng thử lại sau.")
-      
+
 //       if (axios.isAxiosError(error)) {
 //         if (error.response?.status === 401) {
 //           toast.error("Phiên đăng nhập đã hết hạn")
@@ -358,11 +358,11 @@
 //            {/* Sticky Search Bar - CĂN GIỮA HOÀN HẢO */}
 //            <div className="sticky top-16 z-40  backdrop-blur-md shadow-sm border-b border-gray-200">
 //         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          
+
 //           {/* CĂN GIỮA TOÀN BỘ */}
 //           <div className="flex justify-center">
 //             <div className="w-full max-w-4xl">
-              
+
 //               <div className="flex flex-col sm:flex-row gap-3 items-center">
 //                 {/* Search Input */}
 //                 <div className="relative flex-1 max-w-xl w-full">
@@ -418,10 +418,10 @@
 //               </Link>
 //             </div>
 //               </div>
-              
+
 //             </div>
 //           </div>
-          
+
 //         </div>
 //       </div>
 
@@ -474,7 +474,7 @@
 //                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
 //               />
 //               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              
+
 //               {/* Badges góc trên */}
 //               <div className="absolute top-3 right-3 flex flex-col gap-2">
 //                 {trip.isVerified && (
@@ -616,7 +616,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, MapPin, Calendar, Users, Eye, Download, Star, Loader2 } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Search, MapPin, Calendar, Users, Eye, Download, Star, Loader2, MoreVertical, Flag, Home } from "lucide-react"
 import { motion } from "framer-motion"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -678,34 +682,39 @@ export default function PublicFeedPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [likedTripIds, setLikedTripIds] = useState<Set<string>>(new Set())
+  const [showReportDialog, setShowReportDialog] = useState(false)
+  const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
+  const [reportLoai, setReportLoai] = useState<string>("chuyen_di")
+  const [reportLyDo, setReportLyDo] = useState<string>("")
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false)
 
   // Tính toán số ngày từ ngày bắt đầu và kết thúc
   const calculateDuration = (startDate: string, endDate: string): string => {
     try {
       const start = new Date(startDate)
       const end = new Date(endDate)
-      
+
       // Kiểm tra date hợp lệ
       if (isNaN(start.getTime()) || isNaN(end.getTime())) {
         return "Chưa xác định"
       }
-      
+
       // Đảm bảo tính toán đúng với timezone
       start.setHours(0, 0, 0, 0)
       end.setHours(0, 0, 0, 0)
-      
+
       const diffTime = end.getTime() - start.getTime()
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1 // +1 để tính cả ngày cuối
-      
+
       if (diffDays <= 0) {
         return "1 ngày"
       }
-      
+
       const nights = diffDays - 1
       if (nights === 0) {
         return "1 ngày"
       }
-      
+
       return `${diffDays} ngày ${nights} đêm`
     } catch (error) {
       console.error("Lỗi khi tính duration:", error)
@@ -727,10 +736,10 @@ export default function PublicFeedPage() {
     const moTa = trip.mo_ta || ""
     const ngayBatDau = trip.ngay_bat_dau || new Date().toISOString().split("T")[0]
     const ngayKetThuc = trip.ngay_ket_thuc || ngayBatDau
-    
+
     const duration = calculateDuration(ngayBatDau, ngayKetThuc)
     const budget = formatBudget(trip.tong_ngan_sach || 0, trip.tien_te || "VNĐ")
-    
+
     // ✅ Tạo tags từ mo_ta (kiểm tra null/undefined trước)
     const tags: string[] = []
     if (moTa) {
@@ -818,7 +827,7 @@ export default function PublicFeedPage() {
 
       // Kiểm tra cấu trúc response
       const data = response.data?.danh_sach || response.data?.data || []
-      
+
       if (!Array.isArray(data)) {
         console.error("❌ Dữ liệu không hợp lệ từ API:", response.data)
         throw new Error("Dữ liệu không hợp lệ từ API")
@@ -837,7 +846,7 @@ export default function PublicFeedPage() {
           }
         })
         .filter((trip: DisplayTrip | null): trip is DisplayTrip => trip !== null)
-      
+
       // Cập nhật likedTripIds từ các trips đã thích
       const likedIds = new Set(
         mappedTrips
@@ -845,14 +854,14 @@ export default function PublicFeedPage() {
           .map(trip => trip.id)
       )
       setLikedTripIds(likedIds)
-      
+
       setTrips(mappedTrips)
       setFilteredTrips(mappedTrips)
       console.log(`✅ Đã tải và map thành công ${mappedTrips.length} chuyến đi công khai`)
     } catch (error: any) {
       console.error("❌ Lỗi khi tải danh sách chuyến đi:", error)
       setError("Không thể tải danh sách chuyến đi. Vui lòng thử lại sau.")
-      
+
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 401) {
           toast.error("Phiên đăng nhập đã hết hạn")
@@ -867,6 +876,77 @@ export default function PublicFeedPage() {
       setLoading(false)
     }
   }, [router])
+
+  // Hàm mở dialog báo cáo
+  const openReportDialog = (tripId: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setSelectedTripId(tripId)
+    setReportLoai("chuyen_di")
+    setReportLyDo("")
+    setShowReportDialog(true)
+  }
+
+  // Hàm đóng dialog báo cáo
+  const closeReportDialog = () => {
+    setShowReportDialog(false)
+    setSelectedTripId(null)
+    setReportLoai("chuyen_di")
+    setReportLyDo("")
+  }
+
+  // Hàm gửi báo cáo
+  const handleSubmitReport = async () => {
+    if (!selectedTripId) return
+    if (!reportLyDo.trim()) {
+      toast.error("Vui lòng nhập lý do báo cáo")
+      return
+    }
+
+    const token = Cookies.get("token")
+    if (!token || token === "null" || token === "undefined") {
+      toast.error("Vui lòng đăng nhập để báo cáo")
+      router.replace("/login")
+      return
+    }
+
+    setIsSubmittingReport(true)
+    try {
+      const response = await axios.post(
+        "https://travel-planner-imdw.onrender.com/api/chuyendi/bao-cao",
+        {
+          loai: reportLoai,
+          chuyen_di_id: parseInt(selectedTripId),
+          ly_do: reportLyDo.trim(),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      toast.success(response.data.message || "Báo cáo đã được gửi. Chúng tôi sẽ kiểm tra và xử lý sớm.")
+      closeReportDialog()
+    } catch (error: any) {
+      console.error("Lỗi khi gửi báo cáo:", error)
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          toast.error("Phiên đăng nhập đã hết hạn")
+          router.replace("/login")
+        } else if (error.response?.status === 409) {
+          toast.error(error.response?.data?.message || "Bạn đã gửi báo cáo tương tự và đang chờ xử lý.")
+        } else {
+          toast.error(error.response?.data?.message || "Có lỗi xảy ra khi gửi báo cáo")
+        }
+      } else {
+        toast.error("Có lỗi xảy ra khi gửi báo cáo")
+      }
+    } finally {
+      setIsSubmittingReport(false)
+    }
+  }
 
   // Hàm toggle thích/bỏ thích
   const toggleLike = async (tripId: string, currentLikeState: boolean) => {
@@ -1003,11 +1083,11 @@ export default function PublicFeedPage() {
 
       setTrips(mappedTrips)
       setFilteredTrips(mappedTrips)
-      
+
       // Cập nhật likedTripIds
       const likedIds = new Set(mappedTrips.map(trip => trip.id))
       setLikedTripIds(likedIds)
-      
+
       console.log(`✅ Đã tải và map thành công ${mappedTrips.length} chuyến đi đã thích`)
     } catch (error: any) {
       console.error("❌ Lỗi khi tải danh sách chuyến đi đã thích:", error)
@@ -1263,11 +1343,11 @@ export default function PublicFeedPage() {
       {/* Sticky Search & Filter Bar - Chỉ bo tròn phần này */}
       <div className="sticky top-0 z-40 backdrop-blur-xl shadow-sm border-b border-gray-200/30 bg-white/50 rounded-b-3xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          
+
           {/* CĂN GIỮA TOÀN BỘ - Giữ nguyên layout cũ */}
           <div className="flex justify-center">
             <div className="w-full max-w-4xl">
-              
+
               <div className="flex flex-col sm:flex-row gap-3 items-center">
                 {/* Search Input - Bo tròn */}
                 <div className="relative flex-1 max-w-xl w-full">
@@ -1286,47 +1366,90 @@ export default function PublicFeedPage() {
                     variant={selectedFilter === "all" ? "default" : "outline"}
                     size="sm"
                     onClick={() => setSelectedFilter("all")}
-                    className="h-9 px-4 text-sm font-medium rounded-xl bg-white/40 backdrop-blur-sm border-gray-300/40"
+                    className={`
+      h-9 px-4 text-sm font-medium rounded-xl 
+      border border-gray-300/40 backdrop-blur-sm 
+      transition-all duration-300
+      ${selectedFilter === "all"
+                        ? "bg-sky-50/80 text-sky-900 shadow-lg shadow-sky-100/60 hover:shadow-xl hover:shadow-sky-200/70 hover:bg-sky-50/90"
+                        : "bg-white/40 text-gray-700 hover:bg-white/60 shadow-md hover:shadow-lg"
+                      }
+    `}
                   >
                     Tất cả
                   </Button>
+
                   <Button
                     variant={selectedFilter === "popular" ? "default" : "outline"}
                     size="sm"
                     onClick={() => setSelectedFilter("popular")}
-                    className="h-9 px-4 text-sm font-medium rounded-xl bg-white/40 backdrop-blur-sm border-gray-300/40"
+                    className={`
+      h-9 px-4 text-sm font-medium rounded-xl 
+      border border-gray-300/40 backdrop-blur-sm 
+      transition-all duration-300
+      ${selectedFilter === "popular"
+                        ? "bg-sky-50/80 text-sky-900 shadow-lg shadow-sky-100/60 hover:shadow-xl hover:shadow-sky-200/70 hover:bg-sky-50/90"
+                        : "bg-white/40 text-gray-700 hover:bg-white/60 shadow-md hover:shadow-lg"
+                      }
+    `}
                   >
                     Phổ biến
                   </Button>
+
                   <Button
                     variant={selectedFilter === "liked" ? "default" : "outline"}
                     size="sm"
                     onClick={() => setSelectedFilter("liked")}
-                    className="h-9 px-4 text-sm font-medium rounded-xl bg-white/40 backdrop-blur-sm border-gray-300/40"
+                    className={`
+      h-9 px-4 text-sm font-medium rounded-xl 
+      border border-gray-300/40 backdrop-blur-sm 
+      transition-all duration-300
+      ${selectedFilter === "liked"
+                        ? "bg-sky-50/80 text-sky-900 shadow-lg shadow-sky-100/60 hover:shadow-xl hover:shadow-sky-200/70 hover:bg-sky-50/90"
+                        : "bg-white/40 text-gray-700 hover:bg-white/60 shadow-md hover:shadow-lg"
+                      }
+    `}
                   >
                     Đã thích
                   </Button>
-                  <Button
+
+                  {/* <Button
                     variant={selectedFilter === "recent" ? "default" : "outline"}
                     size="sm"
                     onClick={() => setSelectedFilter("recent")}
-                    className="h-9 px-4 text-sm font-medium rounded-xl bg-white/40 backdrop-blur-sm border-gray-300/40"
+                    className={`
+      h-9 px-4 text-sm font-medium rounded-xl 
+      border border-gray-300/40 backdrop-blur-sm 
+      transition-all duration-300
+      ${selectedFilter === "recent"
+                        ? "bg-sky-50/80 text-sky-900 shadow-lg shadow-sky-100/60 hover:shadow-xl hover:shadow-sky-200/70 hover:bg-sky-50/90"
+                        : "bg-white/40 text-gray-700 hover:bg-white/60 shadow-md hover:shadow-lg"
+                      }
+    `}
                   >
                     Mới nhất
-                  </Button>
+                  </Button> */}
+                                  <div className="flex items-center">
+  <Link href="/dashboard" className="group">
+    <Button 
+      variant="outline" 
+      className="h-9 px-5 text-sm font-medium rounded-xl border border-gray-300/40 bg-white/50 backdrop-blur-sm 
+                 text-sky-700 hover:text-sky-800 hover:bg-sky-50/60 hover:border-sky-300/60 
+                 shadow-md hover:shadow-lg hover:shadow-sky-100/50 
+                 transition-all duration-300 flex items-center gap-2"
+    >
+      {/* Icon nhà - dùng lucide-react, nếu chưa có thì cài: npm install lucide-react */}
+      <Home className="h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
+      <span>Trang Chủ</span>
+    </Button>
+  </Link>
+</div>
                 </div>
-                <div className="flex items-center space-x-4">
-              <Link href="/dashboard">
-                <Button variant="outline" className="border-blue-200/40 text-blue-600 hover:bg-blue-50/40 bg-white/40 backdrop-blur-sm rounded-xl">
-                  Về Trang Chủ
-                </Button>
-              </Link>
-            </div>
+{/* NƠI ĐỂ CODE TRANG CHỦ */}
               </div>
-              
             </div>
           </div>
-          
+
         </div>
       </div>
 
@@ -1360,149 +1483,121 @@ export default function PublicFeedPage() {
 
         {/* Trip Cards Grid */}
         {!loading && !error && (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-    {filteredTrips.map((trip, index) => (
-      <motion.div
-        key={trip.id}
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4, delay: index * 0.05 }}
-        className="group"
-      >
-        <Link href={`/feed/${trip.id}`} className="block h-full">
-          <Card className="h-full overflow-hidden rounded-2xl border-0 shadow-lg hover:shadow-2xl transition-all duration-300 bg-white group-hover:-translate-y-2">
-            {/* Cover Image - Tỉ lệ đẹp hơn */}
-            <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
-              <img
-                src={trip.coverImage || "/placeholder.svg"}
-                alt={trip.title}
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              
-              {/* thích */}
-              {/* <div className="absolute top-3 right-3 flex flex-col gap-2">
-                {trip.isVerified && (
-                  <Badge className="bg-emerald-500 text-white text-xs font-medium px-2 py-1 shadow-md">
-                    <Star className="h-3 w-3 mr-1" />           
-                  </Badge>
-                )}
-                {/* mắt nhìn 
-                <Badge className="bg-white/90 backdrop-blur text-gray-800 text-xs font-medium px-2 py-1">
-                  <Eye className="h-3 w-3 mr-1" />
-                  {trip.viewCount > 999 ? `${(trip.viewCount/1000).toFixed(1)}k` : trip.viewCount}
-                </Badge>
-              </div> */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredTrips.map((trip, index) => (
+              <motion.div
+                key={trip.id}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.4, delay: index * 0.05 }}
+                className="group"
+              >
+                <Link href={`/feed/${trip.id}`} className="block h-full">
+                  <Card className="h-full overflow-hidden rounded-2xl border-0 shadow-lg hover:shadow-2xl transition-all duration-300 bg-white group-hover:-translate-y-2">
+                    {/* Cover Image - Tỉ lệ đẹp hơn */}
+                    <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
+                      <img
+                        src={trip.coverImage || "/placeholder.svg"}
+                        alt={trip.title}
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                      <div className="absolute top-3 right-3">
+                        {trip.isVerified && (
+                          <div className="group relative inline-block">
+                            {/* Dấu 3 chấm dọc */}
+                            <button
+                              onClick={(e) => openReportDialog(trip.id, e)}
+                              className="p-2 rounded-full hover:bg-gray-100 transition z-10"
+                              title="Báo cáo chuyến đi"
+                            >
+                              <MoreVertical className="h-4 w-4 text-gray-600" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
 
-              {/* Budget nổi bật góc dưới trái */}
-              <div className="absolute bottom-3 left-3">
-                <span className="bg-blue-600 text-white px-3 py-1.5 rounded-full text-sm font-bold shadow-lg">
-                  {trip.budget}
-                </span>
-              </div>
-            </div>
+                      {/* Budget nổi bật góc dưới trái */}
+                      <div className="absolute bottom-3 left-3">
+                        <span className="bg-blue-600 text-white px-3 py-1.5 rounded-full text-sm font-bold shadow-lg">
+                          {trip.budget}
+                        </span>
+                      </div>
+                    </div>
 
-            <CardContent className="p-4 space-y-3">
-              {/* Title - ngắn gọn hơn */}
-              <h3 className="font-bold text-lg text-gray-900 line-clamp-2 leading-tight">
-                {trip.title}
-              </h3>
+                    <CardContent className="p-4 space-y-3">
+                      {/* Title - ngắn gọn hơn */}
+                      <h3 className="font-bold text-lg text-gray-900 line-clamp-2 leading-tight">
+                        {trip.title}
+                      </h3>
 
-              {/* Destination + Duration - ngang hàng, gọn */}
-              <div className="flex items-center gap-4 text-sm text-gray-600">
-                <div className="flex items-center gap-1.5">
-                  <MapPin className="h-4 w-4 text-blue-600" />
-                  <span className="font-medium">{trip.destination}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Calendar className="h-4 w-4 text-blue-600" />
-                  <span>{trip.duration}</span>
-                </div>
-              </div>
+                      {/* Destination + Duration - ngang hàng, gọn */}
+                      <div className="flex items-center gap-4 text-sm text-gray-600">
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="h-4 w-4 text-blue-600" />
+                          <span className="font-medium">{trip.destination}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="h-4 w-4 text-blue-600" />
+                          <span>{trip.duration}</span>
+                        </div>
+                      </div>
 
-              {/* Owner + Rating - nhỏ gọn */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={trip.owner.avatar} />
-                    <AvatarFallback className="text-xs">
-                      {trip.owner.name[0]}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-sm font-medium text-gray-800">
-                    {trip.owner.name.split(" ").slice(-1)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                  <span className="text-sm font-bold text-gray-700">{trip.rating}</span>
-                </div>
-              </div>
+                      {/* Owner + Rating - nhỏ gọn */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={trip.owner.avatar} />
+                            <AvatarFallback className="text-xs">
+                              {trip.owner.name[0]}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-sm font-medium text-gray-800">
+                            {trip.owner.name.split(" ").slice(-1)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 invisible">
+                          {/* hoặc dùng hidden phần sao đánh giá */}
+                          {/* <div className="flex items-center gap-1 hidden"> */}
+                          <Star className="h-4 w-4 text-yellow-500 fill-current" />
+                          <span className="text-sm font-bold text-gray-700">{trip.rating}</span>
+                        </div>
+                      </div>
 
-              {/* Tags - nhỏ, tối đa 3 */}
-              {/* khung trạng thái du lịch */}
-              {/* <div className="flex flex-wrap gap-1.5">
-                {trip.tags.slice(0, 3).map((tag) => (
-                  <Badge
-                    key={tag}
-                    variant="secondary"
-                    className="text-xs py-0.5 px-2 bg-blue-50 text-blue-700"
-                  >
-                    {tag}
-                  </Badge>
-                ))}
-                {trip.tags.length > 3 && (
-                  <span className="text-xs text-gray-500">+{trip.tags.length - 3}</span>
-                )}
-              </div> */}
 
-              {/* Thành viên */}
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-1.5 text-gray-600">
-                  <Users className="h-4 w-4 text-blue-600" />
-                  <span>{trip.memberCount} thành viên</span>
-                </div>
-                {/* Tải */}
-                {/* <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-blue-600 hover:bg-blue-50 -mr-2"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    // handle download
-                  }}
-                >
-                  <Download className="h-4 w-4" />
-                </Button>
-                 */}
-                 {/* thích */}
-                 <Badge 
-                   className={`cursor-pointer text-xs font-medium px-2 py-1 shadow-md transition-colors duration-200 group ${
-                     trip.da_thich 
-                       ? "bg-yellow-500 text-yellow-50 hover:bg-yellow-600" 
-                       : "bg-emerald-500 text-white hover:bg-yellow-500 hover:text-yellow-50"
-                   }`}
-                   onClick={(e) => {
-                     e.preventDefault()
-                     e.stopPropagation()
-                     toggleLike(trip.id, trip.da_thich)
-                   }}
-                 >
-                   <Star className={`h-3 w-3 mr-1 transition-colors duration-200 ${trip.da_thich ? "fill-yellow-200" : "group-hover:fill-yellow-200"}`} />
-                   {trip.tong_luot_thich > 0 && (
-                     <span className="ml-1">{trip.tong_luot_thich}</span>
-                   )}
-                 </Badge>
+                      {/* Thành viên */}
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-1.5 text-gray-600">
+                          <Users className="h-4 w-4 text-blue-600" />
+                          <span>{trip.memberCount} thành viên</span>
+                        </div>
 
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-      </motion.div>
-    ))}
-  </div>
-)}
+                        {/* thích */}
+                        <Badge
+                          className={`cursor-pointer text-xs font-medium px-2 py-1 shadow-md transition-colors duration-200 group ${trip.da_thich
+                            ? "bg-yellow-500 text-yellow-50 hover:bg-yellow-600"
+                            : "bg-emerald-500 text-white hover:bg-yellow-500 hover:text-yellow-50"
+                            }`}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            toggleLike(trip.id, trip.da_thich)
+                          }}
+                        >
+                          <Star className={`h-3 w-3 mr-1 transition-colors duration-200 ${trip.da_thich ? "fill-yellow-200" : "group-hover:fill-yellow-200"}`} />
+                          {trip.tong_luot_thich > 0 && (
+                            <span className="ml-1">{trip.tong_luot_thich}</span>
+                          )}
+                        </Badge>
+
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </motion.div>
+            ))}
+          </div>
+        )}
 
         {/* No Results */}
         {!loading && !error && filteredTrips.length === 0 && (
@@ -1529,6 +1624,104 @@ export default function PublicFeedPage() {
           </div>
         </div>
       </footer>
+
+      {/* Dialog Báo Cáo Chuyến Đi */}
+      <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 justify-center w-full -ml-7">
+              <Flag className="h-5 w-5 text-red-500" />
+              Báo cáo chuyến đi
+            </DialogTitle>
+            <DialogDescription>
+              Vui lòng cung cấp thông tin về vấn đề bạn gặp phải với chuyến đi này.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Loại báo cáo */}
+            <div className="space-y-2">
+              <Label htmlFor="loai">Loại báo cáo</Label>
+              <Select value={reportLoai} onValueChange={setReportLoai}    >
+                <SelectTrigger id="loai" className="w-full h-11 
+               border border-gray-300 
+               bg-white 
+               rounded-xl 
+               shadow-sm                                      /* Nổi nhẹ */
+               ring-1 ring-gray-200                          /* Viền sáng nhẹ bên trong */
+               hover:border-gray-400 hover:ring-gray-300     /* Hover xám đậm hơn chút */
+               focus:border-gray-500 focus:ring-gray-400     /* Focus xám rõ + ring đậm */
+               focus-visible:outline-none 
+               focus-visible:ring-2 focus-visible:ring-gray-500/40 
+               transition-all duration-200">
+                  <SelectValue placeholder="Chọn loại báo cáo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="chuyen_di">Báo cáo chuyến đi</SelectItem>
+                  <SelectItem value="chi_phi">Báo cáo chi phí</SelectItem>
+                  <SelectItem value="bai_viet">Báo cáo bài viết</SelectItem>
+                  <SelectItem value="nguoi_dung">Báo cáo người dùng</SelectItem>
+                  <SelectItem value="khac">Khác</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Lý do báo cáo */}
+            <div className="space-y-2">
+              <Label htmlFor="ly_do">Lý do báo cáo *</Label>
+              <Textarea
+                id="ly_do"
+                placeholder="Vui lòng mô tả chi tiết lý do bạn báo cáo chuyến đi này..."
+                value={reportLyDo}
+                onChange={(e) => setReportLyDo(e.target.value)}
+                className="min-h-[120px] resize-none 
+                border border-gray-300 
+                bg-white 
+                rounded-xl 
+                shadow-sm                                          /* Nổi nhẹ */
+                ring-1 ring-gray-200                              /* Viền sáng bên trong */
+                hover:border-gray-400 hover:ring-gray-300         /* Hover tinh tế */
+                focus-visible:border-gray-500 
+                focus-visible:ring-2 focus-visible:ring-gray-500/40 
+                focus-visible:outline-none 
+                transition-all duration-200 
+                placeholder:text-gray-400"
+                required
+              />
+              <p className="text-xs text-gray-500">
+                Vui lòng cung cấp thông tin chi tiết để chúng tôi có thể xử lý báo cáo một cách hiệu quả.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={closeReportDialog}
+              disabled={isSubmittingReport}
+            >
+              Hủy
+            </Button>
+            <Button
+              onClick={handleSubmitReport}
+              disabled={isSubmittingReport || !reportLyDo.trim()}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isSubmittingReport ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Đang gửi...
+                </>
+              ) : (
+                <>
+                  <Flag className="h-4 w-4 mr-2" />
+                  Gửi báo cáo
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

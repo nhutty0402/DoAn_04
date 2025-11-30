@@ -934,62 +934,62 @@ export default function PublicTripDetailPage() {
               </CardContent>
             </Card> */}
             <Card className="overflow-hidden">
-  <CardHeader className="pb-3 bg-gray-50/50 border-b">
-    <CardTitle className="text-lg font-bold text-gray-900">Khoảnh khắc</CardTitle>
-  </CardHeader>
+              <CardHeader className="pb-3 bg-gray-50/50 border-b">
+                <CardTitle className="text-lg font-bold text-gray-900">Bài viết</CardTitle>
+              </CardHeader>
 
-  <CardContent className="p-0">
-    {/* Container cuộn – chính xác và đẹp nhất có thể */}
-    <div className="max-h-96 overflow-y-auto overflow-x-hidden">
-      <div 
-        className="px-6 py-5 space-y-6"
-        // Tailwind + inline style để thanh cuộn mỏng + đẹp + đúng chiều dài
-        style={{ 
-          scrollbarWidth: "thin",
-          scrollbarColor: "#9ca3af transparent"
-        }}
-      >
-        {trip.posts.length ? (
-          trip.posts.slice(0, 3).map((post) => (
-            <div
-              key={post.bai_viet_id}
-              className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200"
-            >
-              <div className="flex items-center gap-3">
-                <Avatar className="h-9 w-9 ring-2 ring-white shadow">
-                  <AvatarImage src={post.avatar_url || DEFAULT_AVATAR} />
-                  <AvatarFallback className="text-xs font-medium">
-                    {post.ho_ten?.[0] || "U"}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{post.ho_ten || "Người dùng"}</p>
-                  <p className="text-xs text-gray-500">{formatDateDisplay(post.tao_luc)}</p>
-                </div>
-              </div>
+              <CardContent className="p-0">
+                {/* Container cuộn – thu nhỏ chiều cao và thanh cuộn đẹp */}
+                <div className="max-h-64 overflow-y-auto overflow-x-hidden">  {/* Thu nhỏ từ max-h-96 thành max-h-64 */}
+                  <div
+                    className="px-6 py-5 space-y-6"
+                    // Tailwind + inline style để thanh cuộn mỏng + đẹp + đúng chiều dài
+                    style={{
+                      scrollbarWidth: "thin",
+                      scrollbarColor: "#9ca3af transparent"
+                    }}
+                  >
+                    {trip.posts.length ? (
+                      trip.posts.slice(0, 3).map((post) => (
+                        <div
+                          key={post.bai_viet_id}
+                          className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-9 w-9 ring-2 ring-white shadow">
+                              <AvatarImage src={post.avatar_url || DEFAULT_AVATAR} />
+                              <AvatarFallback className="text-xs font-medium">
+                                {post.ho_ten?.[0] || "U"}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="text-sm font-semibold text-gray-900">{post.ho_ten || "Người dùng"}</p>
+                              <p className="text-xs text-gray-500">{formatDateDisplay(post.tao_luc)}</p>
+                            </div>
+                          </div>
 
-              <p className="mt-3 text-sm text-gray-700 leading-relaxed line-clamp-3">
-                {post.noi_dung || "Chưa có nội dung chia sẻ."}
-              </p>
+                          <p className="mt-3 text-sm text-gray-700 leading-relaxed line-clamp-3">
+                            {post.noi_dung || "Chưa có nội dung chia sẻ."}
+                          </p>
 
-              {post.anh_chinh && (
-                <img
-                  src={post.anh_chinh}
-                  alt="Khoảnh khắc"
-                  className="mt-3 w-full h-48 object-cover rounded-lg border border-gray-200 shadow-sm"
-                />
-              )}
-            </div>
-          ))
-        ) : (
-          <div className="py-20 text-center">
-            <p className="text-gray-500 text-sm">Chưa có bài viết nào cho chuyến đi này.</p>
-          </div>
-        )}
-      </div>
+                          {post.anh_chinh && (
+                            <img
+                              src={post.anh_chinh}
+                              alt="Khoảnh khắc"
+                              className="mt-3 w-full h-48 object-cover rounded-lg border border-gray-200 shadow-sm"
+                            />
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="py-20 text-center">
+                        <p className="text-gray-500 text-sm">Chưa có bài viết nào cho chuyến đi này.</p>
+                      </div>
+                    )}
+                  </div>
 
-      {/* Thanh cuộn đẹp cho Chrome/Safari/Edge */}
-      <style jsx>{`
+                  {/* Thanh cuộn đẹp cho Chrome/Safari/Edge */}
+                  <style jsx>{`
         div::-webkit-scrollbar {
           width: 7px;
         }
@@ -1006,9 +1006,9 @@ export default function PublicTripDetailPage() {
           background-color: #6b7280;
         }
       `}</style>
-    </div>
-  </CardContent>
-</Card>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>

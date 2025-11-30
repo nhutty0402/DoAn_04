@@ -621,7 +621,7 @@ export function MapsTab({ tripId }: MapsTabProps) {
                 </div>
               )}
 
-              <div className="max-h-80 md:max-h-96 overflow-y-auto pr-2">
+              <div className="max-h-96 md:max-h-[478px] overflow-y-auto pr-2">
                 <div className="grid grid-cols-1 gap-4">
                 {hotels.map((hotel) => (
                   <div

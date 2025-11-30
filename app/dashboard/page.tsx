@@ -23,6 +23,7 @@ export default function DashboardPage() {
   const [trips, setTrips] = useState<any[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
+  const [filterPrivacy, setFilterPrivacy] = useState("all")
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingTrip, setEditingTrip] = useState<any>(null)
   const [deletingTrip, setDeletingTrip] = useState<any>(null)
@@ -83,16 +84,23 @@ export default function DashboardPage() {
 
   const filteredTrips = trips.filter((trip) => {
     const matchesSearch = trip.tenChuyenDi.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesFilter = filterStatus === "all" || trip.trangThai === filterStatus
-    return matchesSearch && matchesFilter
+    const matchesStatusFilter = filterStatus === "all" || trip.trangThai === filterStatus
+    const matchesPrivacyFilter = 
+      filterPrivacy === "all" || 
+      (filterPrivacy === "public" && trip.congKhai === 1) ||
+      (filterPrivacy === "private" && trip.congKhai === 0)
+    return matchesSearch && matchesStatusFilter && matchesPrivacyFilter
   })
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
+      all:{label:"Tất cả", variant: "secondary" as const },
       planning: { label: "Đang thực hiện", variant: "secondary" as const },
       upcoming: { label: "Sắp tới", variant: "secondary" as const },
       completed: { label: "Hoàn thành", variant: "outline" as const },
+      
     }
+    
     return statusConfig[status as keyof typeof statusConfig] || statusConfig.planning
   }
 
@@ -277,21 +285,30 @@ export default function DashboardPage() {
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 border border-border rounded-md bg-background text-foreground"
+              className="px-3 py-2 border border-gray-300 rounded-md bg-white text-foreground 
+                         focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400
+                         hover:border-gray-400 transition-all duration-200 shadow-sm
+                         cursor-pointer"
             >
+              <option value="all">Tất cả</option>
               <option value="planning">Đang thực hiện</option>
+              {/* <option value="upcoming">Sắp tới</option> */}
               <option value="completed">Hoàn thành</option>
             </select>
           </div>
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
             <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 border border-border rounded-md bg-background text-foreground"
+              value={filterPrivacy}
+              onChange={(e) => setFilterPrivacy(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md bg-white text-foreground 
+                         focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400
+                         hover:border-gray-400 transition-all duration-200 shadow-sm
+                         cursor-pointer"
             >
-              <option value="private">Riêng tư</option>
+              <option value="all">Tất cả</option>
               <option value="public">Công khai</option>
+              <option value="private">Riêng tư</option>
             </select>
           </div>
         </div>
@@ -401,11 +418,11 @@ export default function DashboardPage() {
             <MapPin className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-foreground mb-2">Không tìm thấy chuyến đi</h3>
             <p className="text-muted-foreground mb-4">
-              {searchTerm || filterStatus !== "all"
+              {searchTerm || filterStatus !== "all" || filterPrivacy !== "all"
                 ? "Thử thay đổi từ khóa tìm kiếm hoặc bộ lọc"
                 : "Bắt đầu tạo chuyến đi đầu tiên của bạn"}
             </p>
-            {!searchTerm && filterStatus === "all" && (
+            {!searchTerm && filterStatus === "all" && filterPrivacy === "all" && (
               <Button onClick={() => setShowCreateModal(true)} className="bg-primary hover:bg-primary/90">
                 <Plus className="h-4 w-4 mr-2" />
                 Tạo Chuyến Đi Đầu Tiên
