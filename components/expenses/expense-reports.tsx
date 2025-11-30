@@ -550,12 +550,12 @@ export function ExpenseReports({ expenses, members, tripId }: ExpenseReportsProp
                             }}
                           />
                         </div>
-                        <div className="text-xs text-right">
+                        {/* <div className="text-xs text-right">
                           Cân bằng:{" "}
                           <span className={member.balance >= 0 ? "text-green-600" : "text-red-600"}>
                             {member.balance.toLocaleString("vi-VN")} VNĐ
                           </span>
-                        </div>
+                        </div> */}
                       </>
                     )}
                   </div>

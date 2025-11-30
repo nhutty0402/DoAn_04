@@ -249,10 +249,11 @@ export function ExpensesList({ expenses, members, onUpdateExpense }: ExpensesLis
                         <Calendar className="h-4 w-4" />
                         <span>{new Date(expense.ngayChiTieu).toLocaleDateString("vi-VN")}</span>
                       </div>
-                      <div className="flex items-center gap-1">
+                      {/* NGƯỜI */}
+                      {/* <div className="flex items-center gap-1">
                         <Users className="h-4 w-4" />
                         <span>{getParticipantCount(expense)} người</span>
-                      </div>
+                      </div> */}
                       <span>•</span>
                       <span>{getSplitMethodLabel(expense.hinhThucChia)}</span>
                     </div>

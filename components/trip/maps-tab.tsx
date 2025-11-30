@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { MapPin, Navigation, Cloud, Sun, CloudRain, Search, Navigation2, Star } from "lucide-react"
+import { MapPin, Navigation, Cloud, Sun, CloudRain, Search, Navigation2, Star, Plane, Calendar } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface MapsTabProps {
@@ -72,6 +72,28 @@ export function MapsTab({ tripId }: MapsTabProps) {
   const [forecast, setForecast] = useState<{ dia_diem?: string; quoc_gia?: string; du_bao?: Record<string, any[]> } | null>(null)
   const [forecastLoading, setForecastLoading] = useState<boolean>(false)
   const [forecastError, setForecastError] = useState<string | null>(null)
+
+  // Flight states
+  const [roundTripFlights, setRoundTripFlights] = useState<any | null>(null)
+  const [loadingRoundTrip, setLoadingRoundTrip] = useState<boolean>(false)
+  const [roundTripError, setRoundTripError] = useState<string | null>(null)
+  
+  const [oneWayFlights, setOneWayFlights] = useState<any[]>([])
+  const [loadingOneWay, setLoadingOneWay] = useState<boolean>(false)
+  const [oneWayError, setOneWayError] = useState<string | null>(null)
+  
+  // One-way flight search form
+  const [flightFrom, setFlightFrom] = useState("")
+  const [flightTo, setFlightTo] = useState("")
+  const [flightDate, setFlightDate] = useState("")
+  
+  // Trip info
+  const [tripInfo, setTripInfo] = useState<{
+    dia_diem_xuat_phat?: string
+    dia_diem_den?: string
+    ngay_bat_dau?: string
+    ngay_ket_thuc?: string
+  } | null>(null)
 
   // Các địa điểm phổ biến để gợi ý (hỗ trợ cả tiếng Việt có dấu và không dấu)
   const popularLocations = [
@@ -273,6 +295,143 @@ export function MapsTab({ tripId }: MapsTabProps) {
     }
   }
 
+  // Fetch trip info để lấy thông tin địa điểm và ngày
+  const fetchTripInfo = async () => {
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") return
+
+      const response = await axios.get(
+        `https://travel-planner-imdw.onrender.com/api/chuyendi/${tripId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
+
+      const tripData = response.data?.data || response.data?.result || response.data
+      if (tripData) {
+        setTripInfo({
+          dia_diem_xuat_phat: tripData.dia_diem_xuat_phat,
+          dia_diem_den: tripData.dia_diem_den,
+          ngay_bat_dau: tripData.ngay_bat_dau,
+          ngay_ket_thuc: tripData.ngay_ket_thuc,
+        })
+      }
+    } catch (err) {
+      console.error("Lỗi lấy thông tin chuyến đi:", err)
+    }
+  }
+
+  // Fetch chuyến bay khứ hồi dựa trên tripId
+  const fetchRoundTripFlights = async () => {
+    setLoadingRoundTrip(true)
+    setRoundTripError(null)
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        setRoundTripError("Phiên đăng nhập đã hết hạn")
+        return
+      }
+
+      const response = await axios.get(
+        `https://travel-planner-imdw.onrender.com/api/ve-may-bay/chuyendi/${tripId}/khu-hoi`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
+
+      console.log("✅ Chuyến bay khứ hồi:", response.data)
+      setRoundTripFlights(response.data)
+    } catch (err: any) {
+      console.error("Lỗi lấy chuyến bay khứ hồi:", err)
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 400) {
+          setRoundTripError(err.response?.data?.message || "Chuyến đi chưa có đủ thông tin để gợi ý vé khứ hồi")
+        } else if (err.response?.status === 404) {
+          setRoundTripError("Không tìm thấy chuyến đi")
+        } else {
+          setRoundTripError(err.response?.data?.message || "Không thể tải gợi ý chuyến bay")
+        }
+      } else {
+        setRoundTripError("Không thể tải gợi ý chuyến bay")
+      }
+    } finally {
+      setLoadingRoundTrip(false)
+    }
+  }
+
+  // Tìm kiếm chuyến bay một chiều
+  const searchOneWayFlights = async () => {
+    if (!flightFrom || !flightTo || !flightDate) {
+      toast({
+        title: "Thiếu thông tin",
+        description: "Vui lòng nhập đầy đủ: Đi từ, Đến, Ngày bay",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setLoadingOneWay(true)
+    setOneWayError(null)
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        toast({
+          title: "Lỗi xác thực",
+          description: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+          variant: "destructive",
+        })
+        router.replace("/login")
+        return
+      }
+
+      const response = await axios.get(
+        "https://travel-planner-imdw.onrender.com/api/ve-may-bay/goi-y-don-gian",
+        {
+          params: {
+            from: flightFrom.trim(),
+            to: flightTo.trim(),
+            ngay_di: flightDate,
+          },
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
+
+      console.log("✅ Chuyến bay một chiều:", response.data)
+      setOneWayFlights(response.data?.danh_sach || [])
+      
+      if (response.data?.tong_so === 0) {
+        setOneWayError("Không tìm thấy chuyến bay phù hợp")
+      }
+    } catch (err: any) {
+      console.error("Lỗi tìm chuyến bay:", err)
+      if (axios.isAxiosError(err)) {
+        if (err.response?.status === 400) {
+          setOneWayError(err.response?.data?.message || "Thiếu thông tin hoặc không xác định được mã sân bay")
+        } else if (err.response?.status === 401) {
+          toast({
+            title: "Phiên đăng nhập hết hạn",
+            description: "Token không hợp lệ. Vui lòng đăng nhập lại.",
+            variant: "destructive",
+          })
+          router.replace("/login")
+        } else {
+          setOneWayError(err.response?.data?.message || "Không thể tìm chuyến bay")
+        }
+      } else {
+        setOneWayError("Không thể tìm chuyến bay")
+      }
+      const errorMsg = err.response?.data?.message || "Không thể tìm chuyến bay"
+      toast({
+        title: "Lỗi",
+        description: errorMsg,
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingOneWay(false)
+    }
+  }
+
   // Try browser geolocation first, fallback to Đà Nẵng
   useEffect(() => {
     const fallbackDaNang = { lat: 16.0471, lon: 108.2425 }
@@ -295,10 +454,18 @@ export function MapsTab({ tripId }: MapsTabProps) {
     }
   }, [])
 
+  // Fetch trip info và round trip flights khi component mount
+  useEffect(() => {
+    if (tripId) {
+      fetchTripInfo().then(() => {
+        fetchRoundTripFlights()
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripId])
+
   return (
-
     <div className="space-y-6">
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Thời Tiết */}
         <Card className="h-fit">
@@ -503,6 +670,192 @@ export function MapsTab({ tripId }: MapsTabProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Gợi ý chuyến bay khứ hồi */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Plane className="h-5 w-5 text-primary" />
+            Gợi ý vé máy bay khứ hồi
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingRoundTrip && (
+            <p className="text-sm text-muted-foreground">Đang tải gợi ý chuyến bay...</p>
+          )}
+          {roundTripError && (
+            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+              <p className="text-sm text-destructive">{roundTripError}</p>
+            </div>
+          )}
+          {!loadingRoundTrip && !roundTripError && roundTripFlights && (
+            <div className="space-y-6">
+              {/* Chiều đi */}
+              {roundTripFlights.chieu_di && (
+                <div>
+                  <h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                    <Navigation2 className="h-4 w-4" />
+                    Chiều đi: {roundTripFlights.from} → {roundTripFlights.to}
+                    <span className="text-xs text-muted-foreground ml-2">
+                      ({new Date(roundTripFlights.ngay_di).toLocaleDateString("vi-VN")})
+                    </span>
+                  </h4>
+                  <div className="max-h-64 overflow-y-auto space-y-3 pr-2">
+                    {roundTripFlights.chieu_di.danh_sach && roundTripFlights.chieu_di.danh_sach.length > 0 ? (
+                      roundTripFlights.chieu_di.danh_sach.slice(0, 5).map((flight: any, idx: number) => (
+                        <div key={idx} className="border rounded-lg p-3 hover:shadow-md transition-shadow">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                <Badge variant="secondary">{flight.airline || "Không xác định"}</Badge>
+                                <span className="text-sm font-medium">{flight.from} → {flight.to}</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground space-y-1">
+                                <div>Khởi hành: {flight.depart_time || "N/A"}</div>
+                                {flight.return_time && <div>Đến: {flight.return_time}</div>}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-lg font-bold text-primary">
+                                {flight.price ? `${new Intl.NumberFormat("vi-VN").format(flight.price)} ${flight.currency || roundTripFlights.chieu_di.currency || "VNĐ"}` : "Liên hệ"}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Không tìm thấy chuyến bay chiều đi</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Chiều về */}
+              {roundTripFlights.chieu_ve && (
+                <div>
+                  <h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                    <Navigation2 className="h-4 w-4 rotate-180" />
+                    Chiều về: {roundTripFlights.to} → {roundTripFlights.from}
+                    <span className="text-xs text-muted-foreground ml-2">
+                      ({new Date(roundTripFlights.ngay_ve).toLocaleDateString("vi-VN")})
+                    </span>
+                  </h4>
+                  <div className="max-h-64 overflow-y-auto space-y-3 pr-2">
+                    {roundTripFlights.chieu_ve.danh_sach && roundTripFlights.chieu_ve.danh_sach.length > 0 ? (
+                      roundTripFlights.chieu_ve.danh_sach.slice(0, 5).map((flight: any, idx: number) => (
+                        <div key={idx} className="border rounded-lg p-3 hover:shadow-md transition-shadow">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                <Badge variant="secondary">{flight.airline || "Không xác định"}</Badge>
+                                <span className="text-sm font-medium">{flight.from} → {flight.to}</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground space-y-1">
+                                <div>Khởi hành: {flight.depart_time || "N/A"}</div>
+                                {flight.return_time && <div>Đến: {flight.return_time}</div>}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-lg font-bold text-primary">
+                                {flight.price ? `${new Intl.NumberFormat("vi-VN").format(flight.price)} ${flight.currency || roundTripFlights.chieu_ve.currency || "VNĐ"}` : "Liên hệ"}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Không tìm thấy chuyến bay chiều về</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Tìm kiếm chuyến bay một chiều */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Plane className="h-5 w-5 text-primary" />
+            Tìm kiếm vé máy bay một chiều
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="text-sm font-medium mb-1 block">Đi từ</label>
+                <Input
+                  value={flightFrom}
+                  onChange={(e) => setFlightFrom(e.target.value)}
+                  placeholder="Ví dụ: Hà Nội, Ha Noi"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Đến</label>
+                <Input
+                  value={flightTo}
+                  onChange={(e) => setFlightTo(e.target.value)}
+                  placeholder="Ví dụ: Đà Nẵng, Da Nang"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Ngày bay</label>
+                <Input
+                  type="date"
+                  value={flightDate}
+                  onChange={(e) => setFlightDate(e.target.value)}
+                  min={new Date().toISOString().split("T")[0]}
+                />
+              </div>
+            </div>
+            <Button
+              onClick={searchOneWayFlights}
+              disabled={loadingOneWay || !flightFrom || !flightTo || !flightDate}
+              className="w-full md:w-auto"
+            >
+              {loadingOneWay ? "Đang tìm..." : "Tìm chuyến bay"}
+            </Button>
+
+            {oneWayError && (
+              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                <p className="text-sm text-destructive">{oneWayError}</p>
+              </div>
+            )}
+
+            {!loadingOneWay && oneWayFlights.length > 0 && (
+              <div className="space-y-3 mt-4">
+                <h4 className="font-semibold">Kết quả tìm kiếm ({oneWayFlights.length} chuyến bay)</h4>
+                <div className="max-h-96 overflow-y-auto space-y-3 pr-2">
+                  {oneWayFlights.map((flight: any, idx: number) => (
+                    <div key={idx} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <Badge variant="secondary">{flight.airline || "Không xác định"}</Badge>
+                            <span className="text-sm font-medium">{flight.from} → {flight.to}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground space-y-1">
+                            <div>Khởi hành: {flight.depart_time || "N/A"}</div>
+                            {flight.return_time && <div>Đến: {flight.return_time}</div>}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold text-primary">
+                            {flight.price ? `${new Intl.NumberFormat("vi-VN").format(flight.price)} ${flight.currency || "VNĐ"}` : "Liên hệ"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Modal chi tiết khách sạn đơn giản */}
       {selectedHotel && (

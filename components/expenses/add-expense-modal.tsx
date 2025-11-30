@@ -392,7 +392,7 @@ export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpen
         className="bg-card rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
       >
         <Card className="border-0 shadow-none">
-          <CardHeader className="relative">
+          <CardHeader className="text-center">
             <Button variant="ghost" size="icon" className="absolute right-2 top-2" onClick={onClose}>
               <X className="h-4 w-4" />
             </Button>

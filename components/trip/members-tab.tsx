@@ -205,6 +205,54 @@ export function MembersTab({ members: initialMembers, tripId, currentUserId }: M
       setCreatingInvite(false)
     }
   }
+  
+  // LẤY LINK MỜI TỰ ĐỘNG KHI LOAD TRANG
+  useEffect(() => {
+    const fetchExistingInvite = async () => {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        return // Không có token thì thôi
+      }
+
+      try {
+        const res = await axios.get(
+          `https://travel-planner-imdw.onrender.com/api/moi-thanh-vien/${tripId}/invites`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        )
+
+        // Backend trả về: { chuyen_di_id, invites: [{ ma_code, tao_luc, het_han }] }
+        const invites = res.data?.invites || []
+        if (invites.length > 0) {
+          const latest = invites[0] // Lấy invite đầu tiên (mới nhất)
+          const maCode = latest.ma_code
+
+          if (maCode) {
+            const fullLink = `https://do-an-04.vercel.app/invite/${maCode}`
+            setInviteInfo({
+              ma_code: maCode,
+              invite_link: fullLink,
+              qr_code: "",
+              backend_link: undefined,
+            })
+          }
+        }
+      } catch (err: any) {
+        // Nếu lỗi (ví dụ: chưa có invite, 404, v.v.) → im lặng, không báo lỗi cho user
+        console.log("Chưa có link mời hoặc lỗi khi lấy:", err.response?.status)
+      }
+    }
+
+    if (tripId) {
+      fetchExistingInvite()
+    }
+  }, [tripId])
+// ----------------------------------------------------------------------------------------------
+
 
   const handlePreviewInvite = async () => {
     const inviteLink = inviteInfo?.invite_link?.trim()

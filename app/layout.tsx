@@ -21,10 +21,10 @@ const dmSans = DM_Sans({
 })
 
 export const metadata: Metadata = {
-  title: "TravelPlan - Plan Your Perfect Trip",
+  title: "VN-Travel.",
   description:
     "Comprehensive travel planning app with itinerary management, expense tracking, and real-time collaboration",
-  generator: "TravelPlan",
+  generator: "VN-Travel",
 }
 
 export default function RootLayout({

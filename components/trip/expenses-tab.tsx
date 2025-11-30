@@ -239,7 +239,7 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
 
       // Backend trả về: { message, tong_so, danh_sach: [...] }
       const apiData = response.data?.danh_sach || []
-      
+
       // Map API response to component format - only accepted members
       const mappedMembers = apiData
         .filter((item: any) => item.trang_thai_tham_gia === "accepted")
@@ -613,22 +613,20 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="list" className="flex items-center gap-2">
-            <Receipt className="h-4 w-4" />
-            <span className="hidden sm:inline">Danh sách</span>
+        <TabsList className="inline-flex h-11 items-center justify-center rounded-full bg-muted p-1 text-muted-foreground mx-auto">
+          <TabsTrigger
+            value="list"
+            className="inline-flex items-center justify-center whitespace-nowrap rounded-full px-6 py-2 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow"
+          >
+            <Receipt className="h-4 w-4 mr-2" />
+            Danh sách
           </TabsTrigger>
-          <TabsTrigger value="reports" className="flex items-center gap-2">
-            <PieChart className="h-4 w-4" />
-            <span className="hidden sm:inline">Báo cáo</span>
-          </TabsTrigger>
-          <TabsTrigger value="settlement" className="flex items-center gap-2">
-            <Calculator className="h-4 w-4" />
-            <span className="hidden sm:inline">Quyết toán</span>
-          </TabsTrigger>
-          <TabsTrigger value="history" className="flex items-center gap-2">
-            <DollarSign className="h-4 w-4" />
-            <span className="hidden sm:inline">Lịch sử</span>
+          <TabsTrigger
+            value="reports"
+            className="inline-flex items-center justify-center whitespace-nowrap rounded-full px-6 py-2 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow"
+          >
+            <PieChart className="h-4 w-4 mr-2" />
+            Báo cáo
           </TabsTrigger>
         </TabsList>
 

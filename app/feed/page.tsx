@@ -628,6 +628,7 @@ interface TripFromAPI {
   mo_ta: string | null
   url_avt: string | null
   dia_diem_xuat_phat: string | null
+  dia_diem_den?: string | null
   ngay_bat_dau: string | null
   ngay_ket_thuc: string | null
   chu_so_huu_id: number
@@ -639,6 +640,8 @@ interface TripFromAPI {
   chu_so_huu_ten: string | null
   chu_so_huu_avatar: string | null
   tong_thanh_vien: number | null
+  da_thich?: boolean
+  tong_luot_thich?: number
 }
 
 // Interface cho trip hiển thị
@@ -662,6 +665,8 @@ interface DisplayTrip {
   highlights: string[]
   budget: string
   isVerified: boolean
+  da_thich: boolean
+  tong_luot_thich: number
 }
 
 export default function PublicFeedPage() {
@@ -672,6 +677,7 @@ export default function PublicFeedPage() {
   const [filteredTrips, setFilteredTrips] = useState<DisplayTrip[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [likedTripIds, setLikedTripIds] = useState<Set<string>>(new Set())
 
   // Tính toán số ngày từ ngày bắt đầu và kết thúc
   const calculateDuration = (startDate: string, endDate: string): string => {
@@ -776,6 +782,8 @@ export default function PublicFeedPage() {
       highlights,
       budget,
       isVerified: trip.cong_khai === 1,
+      da_thich: trip.da_thich || false,
+      tong_luot_thich: trip.tong_luot_thich || 0,
     }
   }
 
@@ -830,6 +838,14 @@ export default function PublicFeedPage() {
         })
         .filter((trip: DisplayTrip | null): trip is DisplayTrip => trip !== null)
       
+      // Cập nhật likedTripIds từ các trips đã thích
+      const likedIds = new Set(
+        mappedTrips
+          .filter(trip => trip.da_thich)
+          .map(trip => trip.id)
+      )
+      setLikedTripIds(likedIds)
+      
       setTrips(mappedTrips)
       setFilteredTrips(mappedTrips)
       console.log(`✅ Đã tải và map thành công ${mappedTrips.length} chuyến đi công khai`)
@@ -852,10 +868,295 @@ export default function PublicFeedPage() {
     }
   }, [router])
 
-  // Fetch trips khi component mount
+  // Hàm toggle thích/bỏ thích
+  const toggleLike = async (tripId: string, currentLikeState: boolean) => {
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        toast.error("Vui lòng đăng nhập để thích bài viết")
+        router.replace("/login")
+        return
+      }
+
+      const response = await axios.post(
+        `https://travel-planner-imdw.onrender.com/api/chuyendi/${tripId}/thich`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      const { da_thich, tong_luot_thich, message } = response.data
+
+      // Cập nhật likedTripIds
+      setLikedTripIds((prev) => {
+        const newSet = new Set(prev)
+        if (da_thich) {
+          newSet.add(tripId)
+        } else {
+          newSet.delete(tripId)
+        }
+        return newSet
+      })
+
+      // Cập nhật state của trip
+      setTrips((prevTrips) =>
+        prevTrips.map((trip) =>
+          trip.id === tripId
+            ? { ...trip, da_thich, tong_luot_thich }
+            : trip
+        )
+      )
+
+      setFilteredTrips((prevTrips) =>
+        prevTrips.map((trip) =>
+          trip.id === tripId
+            ? { ...trip, da_thich, tong_luot_thich }
+            : trip
+        )
+      )
+
+      toast.success(message || (da_thich ? "Đã thích chuyến đi" : "Đã hủy thích chuyến đi"))
+    } catch (error: any) {
+      console.error("Lỗi khi toggle thích:", error)
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          toast.error("Phiên đăng nhập đã hết hạn")
+          router.replace("/login")
+        } else {
+          toast.error(error.response?.data?.message || "Có lỗi xảy ra khi thích bài viết")
+        }
+      } else {
+        toast.error("Có lỗi xảy ra khi thích bài viết")
+      }
+    }
+  }
+
+  // Fetch danh sách chuyến đi đã thích
+  const fetchLikedTrips = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("Không có token → chuyển về /login")
+        router.replace("/login")
+        return
+      }
+
+      const response = await axios.get(
+        "https://travel-planner-imdw.onrender.com/api/chuyendi/da-thich",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      console.log("✅ API Response (Liked Trips):", response.data)
+
+      const data = Array.isArray(response.data) ? response.data : []
+
+      // Map data từ API sang format hiển thị
+      const mappedTrips = data
+        .map((trip: any, index: number) => {
+          try {
+            // Tạo TripFromAPI từ response của API liked trips
+            const tripFromAPI: TripFromAPI = {
+              chuyen_di_id: trip.chuyen_di_id,
+              ten_chuyen_di: trip.ten_chuyen_di,
+              mo_ta: trip.mo_ta,
+              url_avt: trip.url_avt || null,
+              dia_diem_xuat_phat: trip.dia_diem_xuat_phat,
+              dia_diem_den: trip.dia_diem_den,
+              ngay_bat_dau: trip.ngay_bat_dau,
+              ngay_ket_thuc: trip.ngay_ket_thuc,
+              chu_so_huu_id: trip.chu_so_huu_id,
+              tien_te: trip.tien_te,
+              trang_thai: trip.trang_thai,
+              tong_ngan_sach: null,
+              tao_luc: trip.tao_luc,
+              cong_khai: trip.cong_khai,
+              chu_so_huu_ten: trip.ten_chu_so_huu,
+              chu_so_huu_avatar: trip.avatar_url,
+              tong_thanh_vien: trip.so_thanh_vien,
+            }
+
+            const displayTrip = mapTripFromAPI(tripFromAPI)
+            // Đảm bảo da_thich và tong_luot_thich được set đúng
+            return {
+              ...displayTrip,
+              da_thich: trip.da_thich || true,
+              tong_luot_thich: trip.tong_luot_thich || 0,
+            }
+          } catch (err) {
+            console.error(`❌ Lỗi khi map trip ${index}:`, err, trip)
+            return null
+          }
+        })
+        .filter((trip: DisplayTrip | null): trip is DisplayTrip => trip !== null)
+
+      setTrips(mappedTrips)
+      setFilteredTrips(mappedTrips)
+      
+      // Cập nhật likedTripIds
+      const likedIds = new Set(mappedTrips.map(trip => trip.id))
+      setLikedTripIds(likedIds)
+      
+      console.log(`✅ Đã tải và map thành công ${mappedTrips.length} chuyến đi đã thích`)
+    } catch (error: any) {
+      console.error("❌ Lỗi khi tải danh sách chuyến đi đã thích:", error)
+      setError("Không thể tải danh sách chuyến đi đã thích. Vui lòng thử lại sau.")
+
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          toast.error("Phiên đăng nhập đã hết hạn")
+          router.replace("/login")
+        } else if (error.response?.status === 404) {
+          // Không có chuyến đi nào đã thích
+          setTrips([])
+          setFilteredTrips([])
+        } else {
+          toast.error(error.response?.data?.message || "Có lỗi xảy ra khi tải danh sách chuyến đi đã thích")
+        }
+      } else {
+        toast.error("Có lỗi xảy ra khi tải danh sách chuyến đi đã thích")
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [router])
+
+  // Fetch chuyến đi hot/phổ biến
+  const fetchHotTrips = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("Không có token → chuyển về /login")
+        router.replace("/login")
+        return
+      }
+
+      // Fetch danh sách chuyến đi đã thích trước để có likedTripIds
+      let currentLikedIds = new Set<string>()
+      try {
+        const likedResponse = await axios.get(
+          "https://travel-planner-imdw.onrender.com/api/chuyendi/da-thich",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        )
+        if (Array.isArray(likedResponse.data)) {
+          currentLikedIds = new Set(likedResponse.data.map((trip: any) => String(trip.chuyen_di_id)))
+          setLikedTripIds(currentLikedIds)
+        }
+      } catch (likedError) {
+        console.warn("Không thể lấy danh sách đã thích, sử dụng likedTripIds hiện tại")
+        currentLikedIds = likedTripIds
+      }
+
+      const response = await axios.get(
+        "https://travel-planner-imdw.onrender.com/api/chuyendi/kham-pha",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      console.log("✅ API Response (Hot Trips):", response.data)
+
+      const data = Array.isArray(response.data) ? response.data : []
+
+      // Map data từ API sang format hiển thị
+      const mappedTrips = data
+        .map((trip: any, index: number) => {
+          try {
+            // Tạo TripFromAPI từ response của API kham-pha
+            const tripFromAPI: TripFromAPI = {
+              chuyen_di_id: trip.chuyen_di_id,
+              ten_chuyen_di: trip.ten_chuyen_di,
+              mo_ta: trip.mo_ta,
+              url_avt: trip.url_avt || null,
+              dia_diem_xuat_phat: trip.dia_diem_den || trip.dia_diem_xuat_phat || null,
+              dia_diem_den: trip.dia_diem_den || null,
+              ngay_bat_dau: trip.ngay_bat_dau,
+              ngay_ket_thuc: trip.ngay_ket_thuc,
+              chu_so_huu_id: trip.chu_so_huu_id,
+              tien_te: "VNĐ", // API không trả về, mặc định VNĐ
+              trang_thai: null,
+              tong_ngan_sach: null,
+              tao_luc: trip.tao_luc,
+              cong_khai: 1, // Chuyến đi hot thường là công khai
+              chu_so_huu_ten: trip.ten_chu_so_huu,
+              chu_so_huu_avatar: trip.avatar_url,
+              tong_thanh_vien: trip.so_thanh_vien,
+              tong_luot_thich: trip.tong_luot_thich,
+            }
+
+            const displayTrip = mapTripFromAPI(tripFromAPI)
+            const tripId = String(trip.chuyen_di_id)
+            // Đảm bảo tong_luot_thich và da_thich được set đúng
+            return {
+              ...displayTrip,
+              tong_luot_thich: trip.tong_luot_thich || 0,
+              da_thich: currentLikedIds.has(tripId),
+            }
+          } catch (err) {
+            console.error(`❌ Lỗi khi map trip ${index}:`, err, trip)
+            return null
+          }
+        })
+        .filter((trip: DisplayTrip | null): trip is DisplayTrip => trip !== null)
+
+      // Lọc ra các chuyến đi đã thích
+      const filteredHotTrips = mappedTrips.filter(trip => !currentLikedIds.has(trip.id))
+
+      setTrips(filteredHotTrips)
+      setFilteredTrips(filteredHotTrips)
+      console.log(`✅ Đã tải và map thành công ${filteredHotTrips.length} chuyến đi hot (đã loại bỏ ${mappedTrips.length - filteredHotTrips.length} chuyến đi đã thích)`)
+    } catch (error: any) {
+      console.error("❌ Lỗi khi tải danh sách chuyến đi hot:", error)
+      setError("Không thể tải danh sách chuyến đi hot. Vui lòng thử lại sau.")
+
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          toast.error("Phiên đăng nhập đã hết hạn")
+          router.replace("/login")
+        } else {
+          toast.error(error.response?.data?.message || "Có lỗi xảy ra khi tải danh sách chuyến đi hot")
+        }
+      } else {
+        toast.error("Có lỗi xảy ra khi tải danh sách chuyến đi hot")
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [router, likedTripIds])
+
+  // Fetch trips khi component mount hoặc khi filter thay đổi
   useEffect(() => {
-    fetchTrips()
-  }, [fetchTrips])
+    if (selectedFilter === "liked") {
+      fetchLikedTrips()
+    } else if (selectedFilter === "popular") {
+      fetchHotTrips()
+    } else {
+      fetchTrips()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFilter])
 
   // Filter trips khi searchTerm hoặc selectedFilter thay đổi
   useEffect(() => {
@@ -879,13 +1180,11 @@ export default function PublicFeedPage() {
       })
     }
 
-    // Filter by category
-    if (selectedFilter !== "all") {
+    // Filter by category (skip if "liked" or "popular" because we already fetch filtered trips)
+    if (selectedFilter !== "all" && selectedFilter !== "liked" && selectedFilter !== "popular") {
       filtered = filtered.filter((trip) => {
         try {
           switch (selectedFilter) {
-            case "popular":
-              return trip.viewCount > 1000
             case "verified":
               return trip.isVerified
             case "recent":
@@ -956,7 +1255,7 @@ export default function PublicFeedPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.2 }}
           >
-            Hàng ngàn lịch trình tuyệt vời từ TravelPlan
+            Hàng ngàn lịch trình tuyệt vời từ VN-Travel
           </motion.p>
         </div>
       </div>
@@ -1000,12 +1299,12 @@ export default function PublicFeedPage() {
                     Phổ biến
                   </Button>
                   <Button
-                    variant={selectedFilter === "verified" ? "default" : "outline"}
+                    variant={selectedFilter === "liked" ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setSelectedFilter("verified")}
+                    onClick={() => setSelectedFilter("liked")}
                     className="h-9 px-4 text-sm font-medium rounded-xl bg-white/40 backdrop-blur-sm border-gray-300/40"
                   >
-                    Đã xác thực
+                    Đã thích
                   </Button>
                   <Button
                     variant={selectedFilter === "recent" ? "default" : "outline"}
@@ -1081,20 +1380,19 @@ export default function PublicFeedPage() {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               
-              {/* Xác thực */}
-              <div className="absolute top-3 right-3 flex flex-col gap-2">
+              {/* thích */}
+              {/* <div className="absolute top-3 right-3 flex flex-col gap-2">
                 {trip.isVerified && (
                   <Badge className="bg-emerald-500 text-white text-xs font-medium px-2 py-1 shadow-md">
-                    <Star className="h-3 w-3 mr-1" />
-                    
+                    <Star className="h-3 w-3 mr-1" />           
                   </Badge>
                 )}
-                {/* mắt nhìn */}
-                {/* <Badge className="bg-white/90 backdrop-blur text-gray-800 text-xs font-medium px-2 py-1">
+                {/* mắt nhìn 
+                <Badge className="bg-white/90 backdrop-blur text-gray-800 text-xs font-medium px-2 py-1">
                   <Eye className="h-3 w-3 mr-1" />
                   {trip.viewCount > 999 ? `${(trip.viewCount/1000).toFixed(1)}k` : trip.viewCount}
-                </Badge> */}
-              </div>
+                </Badge>
+              </div> */}
 
               {/* Budget nổi bật góc dưới trái */}
               <div className="absolute bottom-3 left-3">
@@ -1142,7 +1440,8 @@ export default function PublicFeedPage() {
               </div>
 
               {/* Tags - nhỏ, tối đa 3 */}
-              <div className="flex flex-wrap gap-1.5">
+              {/* khung trạng thái du lịch */}
+              {/* <div className="flex flex-wrap gap-1.5">
                 {trip.tags.slice(0, 3).map((tag) => (
                   <Badge
                     key={tag}
@@ -1155,7 +1454,7 @@ export default function PublicFeedPage() {
                 {trip.tags.length > 3 && (
                   <span className="text-xs text-gray-500">+{trip.tags.length - 3}</span>
                 )}
-              </div>
+              </div> */}
 
               {/* Thành viên */}
               <div className="flex items-center justify-between text-sm">
@@ -1163,7 +1462,8 @@ export default function PublicFeedPage() {
                   <Users className="h-4 w-4 text-blue-600" />
                   <span>{trip.memberCount} thành viên</span>
                 </div>
-                <Button
+                {/* Tải */}
+                {/* <Button
                   variant="ghost"
                   size="sm"
                   className="text-blue-600 hover:bg-blue-50 -mr-2"
@@ -1175,6 +1475,26 @@ export default function PublicFeedPage() {
                 >
                   <Download className="h-4 w-4" />
                 </Button>
+                 */}
+                 {/* thích */}
+                 <Badge 
+                   className={`cursor-pointer text-xs font-medium px-2 py-1 shadow-md transition-colors duration-200 group ${
+                     trip.da_thich 
+                       ? "bg-yellow-500 text-yellow-50 hover:bg-yellow-600" 
+                       : "bg-emerald-500 text-white hover:bg-yellow-500 hover:text-yellow-50"
+                   }`}
+                   onClick={(e) => {
+                     e.preventDefault()
+                     e.stopPropagation()
+                     toggleLike(trip.id, trip.da_thich)
+                   }}
+                 >
+                   <Star className={`h-3 w-3 mr-1 transition-colors duration-200 ${trip.da_thich ? "fill-yellow-200" : "group-hover:fill-yellow-200"}`} />
+                   {trip.tong_luot_thich > 0 && (
+                     <span className="ml-1">{trip.tong_luot_thich}</span>
+                   )}
+                 </Badge>
+
               </div>
             </CardContent>
           </Card>
@@ -1204,7 +1524,7 @@ export default function PublicFeedPage() {
       <footer className="bg-white border-t border-blue-100 mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
           <div className="text-center text-gray-600">
-            <p className="text-sm">&copy; 2024 TravelPlan. Tất cả quyền được bảo lưu.</p>
+            <p className="text-sm">&copy; 2025 VN-Travel. Tất cả quyền được bảo lưu.</p>
             <p className="text-xs mt-2 text-gray-500">Made with love in Vietnam</p>
           </div>
         </div>

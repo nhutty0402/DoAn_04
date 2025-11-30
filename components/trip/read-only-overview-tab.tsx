@@ -99,23 +99,38 @@ export function ReadOnlyOverviewTab({ trip }: ReadOnlyOverviewTabProps) {
         </CardContent>
       </Card> */}
 
-      {/* Stats Grid */}
+      {/* 4 ô thống kê*/}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat, index) => (
-          <Card key={index}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
-                  <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>
-                </div>
-                {stat.icon}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+  {stats.map((stat, index) => (
+    <Card key={index}>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex-1 min-w-0 space-y-1.5">
+            {/* Tiêu đề */}
+            <p className="text-xs font-medium text-muted-foreground">
+              {stat.title}
+            </p>
+
+            {/* Giá trị chính – quan trọng nhất: không xuống dòng, không bị cắt */}
+            <p className="text-lg font-bold text-foreground whitespace-nowrap">
+              {stat.value}
+            </p>
+
+            {/* Mô tả: cho phép xuống dòng tự nhiên nếu dài, nhưng ưu tiên giữ 1 dòng */}
+            <p className="text-xs text-muted-foreground leading-tight line-clamp-2">
+              {stat.description}
+            </p>
+          </div>
+
+          {/* Icon */}
+          <div className="flex-shrink-0">
+            {stat.icon}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  ))}
+</div>
 
       {/* Trip Highlights */}
       {/* <Card>

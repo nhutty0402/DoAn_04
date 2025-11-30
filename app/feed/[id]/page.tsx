@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft, Eye, Download, Star, Share2, Heart, AlertCircle } from "lucide-react"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { ArrowLeft, Eye, Download, Star, Share2, Heart, AlertCircle, X, ChevronLeft, ChevronRight } from "lucide-react"
 import { motion } from "framer-motion"
 import Link from "next/link"
 import { ReadOnlyOverviewTab } from "@/components/trip/read-only-overview-tab"
@@ -24,6 +25,7 @@ interface TripInfoAPI {
   mo_ta: string | null
   url_avt: string | null
   dia_diem_xuat_phat: string | null
+  dia_diem_den: string | null
   ngay_bat_dau: string | null
   ngay_ket_thuc: string | null
   chu_so_huu_id: number
@@ -149,6 +151,21 @@ const formatDateDisplay = (dateString: string | null): string => {
   return date.toLocaleDateString("vi-VN")
 }
 
+const formatTrangThai = (trangThai: string | null): string => {
+  if (!trangThai) return "Không rõ"
+  const status = trangThai.toLowerCase().trim()
+  switch (status) {
+    case "sap_toi":
+      return "Sắp tới"
+    case "dang_thuc_hien":
+      return "Đang thực hiện"
+    case "hoan_thanh":
+      return "Hoàn thành"
+    default:
+      return trangThai
+  }
+}
+
 const calculateDuration = (startDate: string | null, endDate: string | null): string => {
   if (!startDate || !endDate) return "Chưa xác định"
   const start = new Date(startDate)
@@ -236,15 +253,6 @@ const buildItinerary = (itinerary: ItineraryDayAPI[]): any[] =>
       location: activity.ten_dia_diem || "Địa điểm chưa cập nhật",
       duration: formatTimeRange(activity.thoi_gian_bat_dau, activity.thoi_gian_ket_thuc),
       type: inferActivityType(activity.loai_dia_diem),
-      // Chi tiết đầy đủ từ API
-      dia_diem_id: activity.dia_diem_id,
-      vi_do: activity.vi_do,
-      kinh_do: activity.kinh_do,
-      ghi_chu: activity.ghi_chu,
-      loai_dia_diem: activity.loai_dia_diem,
-      google_place_id: activity.google_place_id,
-      thoi_gian_bat_dau: activity.thoi_gian_bat_dau,
-      thoi_gian_ket_thuc: activity.thoi_gian_ket_thuc,
     }))
 
     const titleParts = [`Ngày ${index + 1}`]
@@ -255,10 +263,6 @@ const buildItinerary = (itinerary: ItineraryDayAPI[]): any[] =>
       title: titleParts.join(": "),
       date: formatDateDisplay(day.ngay),
       activities,
-      // Chi tiết đầy đủ từ API
-      lich_trinh_ngay_id: day.lich_trinh_ngay_id,
-      ngay: day.ngay,
-      ghi_chu: day.ghi_chu,
     }
   })
 
@@ -310,7 +314,7 @@ const mapTripDetailFromAPI = (payload: TripDetailAPIResponse): PublicTripDetail 
     owner: {
       name: info.chu_so_huu_ten || "Người dùng",
       avatar: info.chu_so_huu_avatar || DEFAULT_AVATAR,
-      bio: info.mo_ta || "Chuyến đi được chia sẻ từ cộng đồng TravelPlan.",
+      bio: info.mo_ta || "Chuyến đi được chia sẻ từ cộng đồng VN-Travel.",
     },
     coverImage: info.url_avt || DEFAULT_COVER_IMAGE,
     highlights,
@@ -332,6 +336,15 @@ export default function PublicTripDetailPage() {
   const [isLiked, setIsLiked] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [imageViewer, setImageViewer] = useState<{
+    isOpen: boolean
+    images: string[]
+    currentIndex: number
+  }>({
+    isOpen: false,
+    images: [],
+    currentIndex: 0,
+  })
 
   useEffect(() => {
     const id = params.id as string | undefined
@@ -380,6 +393,38 @@ export default function PublicTripDetailPage() {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+  }
+
+  const openImageViewer = (images: string[], startIndex: number = 0) => {
+    setImageViewer({
+      isOpen: true,
+      images,
+      currentIndex: startIndex,
+    })
+  }
+
+  const closeImageViewer = () => {
+    setImageViewer({
+      isOpen: false,
+      images: [],
+      currentIndex: 0,
+    })
+  }
+
+  const nextImage = () => {
+    if (imageViewer.images.length === 0) return
+    setImageViewer((prev) => ({
+      ...prev,
+      currentIndex: (prev.currentIndex + 1) % prev.images.length,
+    }))
+  }
+
+  const prevImage = () => {
+    if (imageViewer.images.length === 0) return
+    setImageViewer((prev) => ({
+      ...prev,
+      currentIndex: (prev.currentIndex - 1 + prev.images.length) % prev.images.length,
+    }))
   }
 
   if (loading) {
@@ -435,7 +480,7 @@ export default function PublicTripDetailPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-50">
       {/* Header */}
-      <div className="bg-white border-b border-blue-100 sticky top-0 z-10">
+      {/* <div className="bg-white border-b border-blue-100 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -452,7 +497,7 @@ export default function PublicTripDetailPage() {
                 <span className="text-gray-900">{trip.title}</span>
               </div>
             </div>
-            {/* <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -476,10 +521,10 @@ export default function PublicTripDetailPage() {
                 <Download className="h-4 w-4 mr-2" />
                 Tải PDF
               </Button>
-            </div> */}
+            </div>
           </div>
         </div>
-      </div>
+      </div> */}
 
       {/* Hero Section */}
       <div className="relative h-96 overflow-hidden">
@@ -487,21 +532,52 @@ export default function PublicTripDetailPage() {
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 p-8">
           <div className="max-w-7xl mx-auto">
+            <div className="flex items-center gap-3 text-sm">
+              {/* Nút quay lại – trong suốt hoàn toàn, chữ trắng xám sang trọng */}
+              <Link
+                href="/feed"
+                className="group inline-flex items-center gap-1.5 px-4 py-2 rounded-xl
+               bg-white/5 dark:bg-white/10
+               backdrop-blur-sm
+               border border-white/20 dark:border-white/30
+               text-gray-200 dark:text-gray-100
+               font-medium
+               hover:bg-white/10 dark:hover:bg-white/20
+               hover:border-white/40
+               hover:text-white
+               hover:shadow-xl hover:shadow-black/5
+               transition-all duration-300"
+              >
+                <span className="group-hover:-translate-x-1 transition-transform duration-300 text-gray-400 group-hover:text-white">
+                  ←
+                </span>
+                Quay lại Bản tin
+              </Link>
+
+              {/* Dấu chấm phân cách nhẹ nhàng */}
+              {/* <span className="text-gray-400 dark:text-gray-500">•</span> */}
+
+              {/* Tiêu đề bài viết */}
+              {/* <span className="font-semibold text-white dark:text-gray-50 truncate max-w-md">
+                {trip.title}
+              </span> */}
+            </div>
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-              <div className="flex items-center gap-2 mb-4">
+              {/* <div className="flex items-center gap-2 mb-4">
                 {trip.isVerified && (
                   // thích
                   <Badge className="bg-green-500 text-white">
                     <Star className="h-3 w-3 mr-1" />              
                   </Badge>
                 )}
-                {/* <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
+                <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
                   <Eye className="h-3 w-3 mr-1" />
                   {trip.viewCount.toLocaleString()} lượt xem
-                </Badge> */}
-              </div>
+                </Badge>
+              </div> */}
               <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">{trip.title}</h1>
               <p className="text-xl text-white/90 mb-6 max-w-3xl">{trip.description}</p>
+
             </motion.div>
           </div>
         </div>
@@ -552,39 +628,58 @@ export default function PublicTripDetailPage() {
                       {trip.expenseDetails.length > 0 && (
                         <div className="mt-8">
                           <h4 className="text-base font-semibold mb-3">Chi tiết giao dịch</h4>
-                          <div className="overflow-x-auto border rounded-lg">
-                            <table className="min-w-full text-sm">
-                              <thead className="bg-gray-50 text-gray-600">
-                                <tr>
-                                  <th className="px-4 py-2 text-left font-medium">Ngày</th>
-                                  <th className="px-4 py-2 text-left font-medium">Nhóm</th>
-                                  <th className="px-4 py-2 text-left font-medium">Mô tả</th>
-                                  <th className="px-4 py-2 text-left font-medium">Người chi</th>
-                                  <th className="px-4 py-2 text-right font-medium">Số tiền</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {trip.expenseDetails.map((detail) => (
-                                  <tr key={detail.chi_phi_id} className="border-t">
-                                    <td className="px-4 py-2 text-gray-600">{formatDateDisplay(detail.ngay)}</td>
-                                    <td className="px-4 py-2">{detail.nhom || "Không rõ"}</td>
-                                    <td className="px-4 py-2">{detail.mo_ta || "—"}</td>
-                                    <td className="px-4 py-2">
-                                      <div className="flex items-center gap-2">
-                                        <Avatar className="h-6 w-6">
-                                          <AvatarImage src={detail.avatar_url || DEFAULT_AVATAR} alt={detail.nguoi_chi || "Người dùng"} />
-                                          <AvatarFallback>{detail.nguoi_chi?.[0] || "U"}</AvatarFallback>
-                                        </Avatar>
-                                        <span>{detail.nguoi_chi || "Người dùng"}</span>
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-2 text-right font-medium">
-                                      {formatCurrencyValue(detail.so_tien, trip.rawInfo.tien_te)}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                          {/* Container chính – đẹp, có shadow nhẹ, bo góc mềm */}
+                          <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white">
+                            {/* Thanh cuộn dọc mượt + giới hạn chiều cao hợp lý */}
+                            <div className="max-h-96 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100">
+                              {/* Thanh cuộn ngang (rất cần trên mobile) */}
+                              <div className="overflow-x-auto">
+                                <table className="min-w-full text-sm">
+                                  <thead className="bg-gray-50 text-gray-700 sticky top-0 z-10 border-b border-gray-200">
+                                    <tr>
+                                      <th className="px-5 py-3.5 text-left font-semibold text-gray-800">Ngày</th>
+                                      <th className="px-5 py-3.5 text-left font-semibold text-gray-800">Nhóm</th>
+                                      <th className="px-5 py-3.5 text-left font-semibold text-gray-800">Mô tả</th>
+                                      <th className="px-5 py-3.5 text-left font-semibold text-gray-800">Người chi</th>
+                                      <th className="px-5 py-3.5 text-right font-semibold text-gray-800">Số tiền</th>
+                                    </tr>
+                                  </thead>
+
+                                  <tbody className="divide-y divide-gray-100">
+                                    {trip.expenseDetails.map((detail) => (
+                                      <tr
+                                        key={detail.chi_phi_id}
+                                        className="hover:bg-gray-50/70 transition-colors duration-150"
+                                      >
+                                        <td className="px-5 py-4 text-gray-600 font-medium">
+                                          {formatDateDisplay(detail.ngay)}
+                                        </td>
+                                        <td className="px-5 py-4 text-gray-800">
+                                          {detail.nhom || "Không rõ"}
+                                        </td>
+                                        <td className="px-5 py-4 text-gray-700">
+                                          {detail.mo_ta || "—"}
+                                        </td>
+                                        <td className="px-5 py-4">
+                                          <div className="flex items-center gap-3">
+                                            <Avatar className="h-6 w-6">
+                                              <AvatarImage src={detail.avatar_url || DEFAULT_AVATAR} alt={detail.nguoi_chi || "Người dùng"} />
+                                              <AvatarFallback>{detail.nguoi_chi?.[0] || "U"}</AvatarFallback>
+                                            </Avatar>
+                                            <span className="font-medium text-gray-800">
+                                              {detail.nguoi_chi || "Người dùng"}
+                                            </span>
+                                          </div>
+                                        </td>
+                                        <td className="px-5 py-4 text-right font-semibold text-gray-900">
+                                          {formatCurrencyValue(detail.so_tien, trip.rawInfo.tien_te)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -598,47 +693,82 @@ export default function PublicTripDetailPage() {
                   </Card>
                 )}
               </TabsContent>
+              {/* CHI TIẾT BÀI VIẾT */}
+              <TabsContent value="posts" className="mt-2">
+                {/* Đây là lớp thêm thanh cuộn đẹp */}
+                <div className="max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-50 pr-2">
 
-              <TabsContent value="posts" className="space-y-6">
-                {trip.posts.length ? (
-                  trip.posts.map((post) => (
-                    <Card key={post.bai_viet_id}>
-                      <CardHeader>
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarImage src={post.avatar_url || DEFAULT_AVATAR} alt={post.ho_ten || "Người dùng"} />
-                            <AvatarFallback>{post.ho_ten?.[0] || "U"}</AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <CardTitle className="text-base">{post.ho_ten || "Người dùng"}</CardTitle>
-                            <p className="text-sm text-gray-500">{formatDateDisplay(post.tao_luc)}</p>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <p className="text-gray-700">{post.noi_dung || "Không có nội dung."}</p>
-                        {post.anh_chinh && (
-                          <img
-                            src={post.anh_chinh}
-                            alt={post.noi_dung || "Ảnh bài viết"}
-                            className="w-full rounded-lg border object-cover max-h-96"
-                          />
-                        )}
-                        {post.anh_phu?.length ? (
-                          <div className="grid grid-cols-2 gap-3">
-                            {post.anh_phu.map((url, idx) => (
-                              <img key={`${post.bai_viet_id}-${idx}`} src={url} alt={`Ảnh phụ ${idx + 1}`} className="rounded-md border object-cover h-32 w-full" />
-                            ))}
-                          </div>
-                        ) : null}
-                      </CardContent>
-                    </Card>
-                  ))
-                ) : (
-                  <Card>
-                    <CardContent className="py-12 text-center text-gray-600">Chưa có bài viết nào cho chuyến đi này.</CardContent>
-                  </Card>
-                )}
+                  <div className="space-y-6">
+                    {trip.posts.length ? (
+                      trip.posts.map((post) => (
+                        <Card key={post.bai_viet_id} className="overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200">
+                          <CardHeader className="pb-3">
+                            <div className="flex items-center gap-3">
+                              <Avatar className="h-10 w-10 ring-2 ring-white shadow-md">
+                                <AvatarImage src={post.avatar_url || DEFAULT_AVATAR} alt={post.ho_ten || "Người dùng"} />
+                                <AvatarFallback className="text-sm font-medium">
+                                  {post.ho_ten?.[0] || "U"}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <CardTitle className="text-base font-semibold text-gray-900">
+                                  {post.ho_ten || "Người dùng"}
+                                </CardTitle>
+                                <p className="text-xs text-gray-500">
+                                  {formatDateDisplay(post.tao_luc)}
+                                </p>
+                              </div>
+                            </div>
+                          </CardHeader>
+
+                          <CardContent className="space-y-4 pt-2">
+                            <p className="text-gray-700 leading-relaxed">
+                              {post.noi_dung || "Không có nội dung."}
+                            </p>
+
+                            {post.anh_chinh && (
+                              <img
+                                src={post.anh_chinh}
+                                alt={post.noi_dung || "Ảnh bài viết"}
+                                className="w-full rounded-xl border border-gray-200 object-cover max-h-96 shadow-sm cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={() => {
+                                  const allImages = [post.anh_chinh, ...(post.anh_phu || [])].filter(Boolean) as string[]
+                                  openImageViewer(allImages, 0)
+                                }}
+                              />
+                            )}
+
+                            {post.anh_phu?.length ? (
+                              <div className="grid grid-cols-2 gap-3">
+                                {post.anh_phu.map((url, idx) => {
+                                  const allImages = [post.anh_chinh, ...(post.anh_phu || [])].filter(Boolean) as string[]
+                                  const imageIndex = post.anh_chinh ? idx + 1 : idx
+                                  return (
+                                    <img
+                                      key={`${post.bai_viet_id}-${idx}`}
+                                      src={url}
+                                      alt={`Ảnh phụ ${idx + 1}`}
+                                      className="rounded-lg border border-gray-200 object-cover h-40 w-full shadow-sm hover:shadow transition-shadow cursor-pointer hover:opacity-90"
+                                      onClick={() => openImageViewer(allImages, imageIndex)}
+                                    />
+                                  )
+                                })}
+                              </div>
+                            ) : null}
+                          </CardContent>
+                        </Card>
+                      ))
+                    ) : (
+                      <Card className="border-dashed">
+                        <CardContent className="py-16 text-center">
+                          <p className="text-gray-500 text-base">
+                            Chưa có bài viết nào cho chuyến đi này.
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                </div>
               </TabsContent>
 
               {/* <TabsContent value="map" className="space-y-6">
@@ -662,10 +792,10 @@ export default function PublicTripDetailPage() {
                   </Avatar>
                   <div>
                     <h4 className="font-semibold">{trip.owner.name}</h4>
-                    <div className="flex items-center gap-1">
+                    {/* <div className="flex items-center gap-1">
                       <Star className="h-4 w-4 text-yellow-400 fill-current" />
                       <span className="text-sm text-gray-600">{trip.rating}</span>
-                    </div>
+                    </div> */}
                   </div>
                 </div>
                 <p className="text-sm text-gray-600 mb-4 line-clamp-4">{trip.owner.bio}</p>
@@ -708,8 +838,8 @@ export default function PublicTripDetailPage() {
               </CardContent>
             </Card> */}
 
-            {/* Trip Stats */}
-            <Card>
+            {/* Thống kê*/}
+            {/* <Card>
               <CardHeader>
                 <CardTitle>Thống kê</CardTitle>
               </CardHeader>
@@ -727,7 +857,7 @@ export default function PublicTripDetailPage() {
                   <span className="font-semibold">{formatDateDisplay(trip.endDate)}</span>
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
 
             <Card>
               <CardHeader>
@@ -739,12 +869,12 @@ export default function PublicTripDetailPage() {
                   <span className="font-semibold">{trip.rawInfo.chuyen_di_id}</span>
                 </div> */}
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Điểm xuất phát:</span>
-                  <span className="font-semibold">{trip.rawInfo.dia_diem_xuat_phat || "Chưa cập nhật"}</span>
+                  <span className="text-gray-600">Địa điểm đến:</span>
+                  <span className="font-semibold">{trip.rawInfo.dia_diem_den || "Chưa cập nhật"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Trạng thái:</span>
-                  <span className="font-semibold">{trip.rawInfo.trang_thai || "Không rõ"}</span>
+                  <span className="font-semibold">{formatTrangThai(trip.rawInfo.trang_thai)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Tạo lúc:</span>
@@ -769,8 +899,8 @@ export default function PublicTripDetailPage() {
               </CardContent>
             </Card>
 
-            {/* Trip Posts */}
-            <Card>
+            {/* Khoảnh khắc */}
+            {/* <Card>
               <CardHeader>
                 <CardTitle>Khoảnh khắc</CardTitle>
               </CardHeader>
@@ -802,10 +932,143 @@ export default function PublicTripDetailPage() {
                   <p className="text-sm text-gray-600">Chưa có bài viết nào cho chuyến đi này.</p>
                 )}
               </CardContent>
-            </Card>
+            </Card> */}
+            <Card className="overflow-hidden">
+  <CardHeader className="pb-3 bg-gray-50/50 border-b">
+    <CardTitle className="text-lg font-bold text-gray-900">Khoảnh khắc</CardTitle>
+  </CardHeader>
+
+  <CardContent className="p-0">
+    {/* Container cuộn – chính xác và đẹp nhất có thể */}
+    <div className="max-h-96 overflow-y-auto overflow-x-hidden">
+      <div 
+        className="px-6 py-5 space-y-6"
+        // Tailwind + inline style để thanh cuộn mỏng + đẹp + đúng chiều dài
+        style={{ 
+          scrollbarWidth: "thin",
+          scrollbarColor: "#9ca3af transparent"
+        }}
+      >
+        {trip.posts.length ? (
+          trip.posts.slice(0, 3).map((post) => (
+            <div
+              key={post.bai_viet_id}
+              className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200"
+            >
+              <div className="flex items-center gap-3">
+                <Avatar className="h-9 w-9 ring-2 ring-white shadow">
+                  <AvatarImage src={post.avatar_url || DEFAULT_AVATAR} />
+                  <AvatarFallback className="text-xs font-medium">
+                    {post.ho_ten?.[0] || "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">{post.ho_ten || "Người dùng"}</p>
+                  <p className="text-xs text-gray-500">{formatDateDisplay(post.tao_luc)}</p>
+                </div>
+              </div>
+
+              <p className="mt-3 text-sm text-gray-700 leading-relaxed line-clamp-3">
+                {post.noi_dung || "Chưa có nội dung chia sẻ."}
+              </p>
+
+              {post.anh_chinh && (
+                <img
+                  src={post.anh_chinh}
+                  alt="Khoảnh khắc"
+                  className="mt-3 w-full h-48 object-cover rounded-lg border border-gray-200 shadow-sm"
+                />
+              )}
+            </div>
+          ))
+        ) : (
+          <div className="py-20 text-center">
+            <p className="text-gray-500 text-sm">Chưa có bài viết nào cho chuyến đi này.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Thanh cuộn đẹp cho Chrome/Safari/Edge */}
+      <style jsx>{`
+        div::-webkit-scrollbar {
+          width: 7px;
+        }
+        div::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        div::-webkit-scrollbar-thumb {
+          background-color: #9ca3af;
+          border-radius: 4px;
+          border: 2px solid transparent;
+          background-clip: content-box;
+        }
+        div::-webkit-scrollbar-thumb:hover {
+          background-color: #6b7280;
+        }
+      `}</style>
+    </div>
+  </CardContent>
+</Card>
           </div>
         </div>
       </div>
+
+      {/* Image Viewer Modal */}
+      <Dialog open={imageViewer.isOpen} onOpenChange={(open) => !open && closeImageViewer()}>
+        <DialogContent className="max-w-[95vw] w-full h-[95vh] p-0 bg-black/95 border-none">
+          <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+            {/* Close Button */}
+            <button
+              onClick={closeImageViewer}
+              className="absolute top-4 right-4 z-50 p-2 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
+              aria-label="Đóng"
+            >
+              <X className="h-6 w-6" />
+            </button>
+
+            {/* Previous Button */}
+            {imageViewer.images.length > 1 && (
+              <button
+                onClick={prevImage}
+                className="absolute left-4 z-50 p-3 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
+                aria-label="Ảnh trước"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </button>
+            )}
+
+            {/* Image Container - Đảm bảo ảnh hiển thị đầy đủ */}
+            {imageViewer.images[imageViewer.currentIndex] && (
+              <div className="w-full h-full flex items-center justify-center p-4">
+                <img
+                  src={imageViewer.images[imageViewer.currentIndex]}
+                  alt={`Ảnh ${imageViewer.currentIndex + 1}`}
+                  className="max-w-full max-h-full w-auto h-auto object-contain"
+                  style={{ maxWidth: '100%', maxHeight: '100%' }}
+                />
+              </div>
+            )}
+
+            {/* Next Button */}
+            {imageViewer.images.length > 1 && (
+              <button
+                onClick={nextImage}
+                className="absolute right-4 z-50 p-3 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors"
+                aria-label="Ảnh sau"
+              >
+                <ChevronRight className="h-6 w-6" />
+              </button>
+            )}
+
+            {/* Image Counter */}
+            {imageViewer.images.length > 1 && (
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-full bg-black/50 text-white text-sm">
+                {imageViewer.currentIndex + 1} / {imageViewer.images.length}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
