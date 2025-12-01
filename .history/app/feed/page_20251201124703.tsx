@@ -646,10 +646,6 @@ interface TripFromAPI {
   tong_thanh_vien: number | null
   da_thich?: boolean
   tong_luot_thich?: number
-  tong_chi_phi?: string | number | null
-  chi_phi?: {
-    tong_chi_phi?: string | number | null
-  } | null
 }
 
 // Interface cho trip hiển thị
@@ -672,7 +668,6 @@ interface DisplayTrip {
   coverImage: string
   highlights: string[]
   budget: string
-  totalExpense: string
   isVerified: boolean
   da_thich: boolean
   tong_luot_thich: number
@@ -744,9 +739,6 @@ export default function PublicFeedPage() {
 
     const duration = calculateDuration(ngayBatDau, ngayKetThuc)
     const budget = formatBudget(trip.tong_ngan_sach || 0, trip.tien_te || "VNĐ")
-    // Lấy tổng chi phí từ tong_chi_phi hoặc chi_phi.tong_chi_phi
-    const tongChiPhi = trip.tong_chi_phi ?? trip.chi_phi?.tong_chi_phi ?? null
-    const totalExpense = formatBudget(tongChiPhi || 0, trip.tien_te || "VNĐ")
 
     // ✅ Tạo tags từ mo_ta (kiểm tra null/undefined trước)
     const tags: string[] = []
@@ -798,7 +790,6 @@ export default function PublicFeedPage() {
       coverImage: trip.url_avt || "/placeholder.svg",
       highlights,
       budget,
-      totalExpense,
       isVerified: trip.cong_khai === 1,
       da_thich: trip.da_thich || false,
       tong_luot_thich: trip.tong_luot_thich || 0,
@@ -1069,6 +1060,7 @@ export default function PublicFeedPage() {
               tien_te: trip.tien_te,
               trang_thai: trip.trang_thai,
               tong_ngan_sach: null,
+              tong_chi_phi: trip.tong_chi_phi || null,
               tao_luc: trip.tao_luc,
               cong_khai: trip.cong_khai,
               chu_so_huu_ten: trip.ten_chu_so_huu,
@@ -1187,6 +1179,7 @@ export default function PublicFeedPage() {
               tien_te: "VNĐ", // API không trả về, mặc định VNĐ
               trang_thai: null,
               tong_ngan_sach: null,
+              tong_chi_phi: trip.tong_chi_phi || null,
               tao_luc: trip.tao_luc,
               cong_khai: 1, // Chuyến đi hot thường là công khai
               chu_so_huu_ten: trip.ten_chu_so_huu,
@@ -1526,10 +1519,10 @@ export default function PublicFeedPage() {
                         )}
                       </div>
 
-                      {/* Tổng chi phí chuyến đi */}
+                      {/* Budget nổi bật góc dưới trái */}
                       <div className="absolute bottom-3 left-3">
                         <span className="bg-blue-600 text-white px-3 py-1.5 rounded-full text-sm font-bold shadow-lg">
-                          {trip.totalExpense}
+                          {trip.budget}
                         </span>
                       </div>
                     </div>

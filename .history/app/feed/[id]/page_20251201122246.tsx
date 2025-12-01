@@ -118,7 +118,6 @@ interface PublicTripDetail {
   coverImage: string
   highlights: string[]
   budget: string
-  totalExpense: string
   isVerified: boolean
   itinerary: any[]
   expenses?: {
@@ -320,7 +319,6 @@ const mapTripDetailFromAPI = (payload: TripDetailAPIResponse): PublicTripDetail 
     coverImage: info.url_avt || DEFAULT_COVER_IMAGE,
     highlights,
     budget: formatBudget(info.tong_ngan_sach, info.tien_te),
-    totalExpense: formatBudget(payload.chi_phi?.tong_chi_phi || 0, info.tien_te),
     isVerified: info.cong_khai === 1,
     itinerary,
     expenses,
@@ -674,7 +672,7 @@ export default function PublicTripDetailPage() {
                                           </div>
                                         </td>
                                         <td className="px-5 py-4 text-right font-semibold text-gray-900">
-                                          {formatCurrencyValue(detail.so_tien, trip.rawInfo.tien_te)}
+                                          {formatCurrencyValue(detail.so_tien)}
                                         </td>
                                       </tr>
                                     ))}
@@ -891,8 +889,8 @@ export default function PublicTripDetailPage() {
                   <span className="font-semibold">{trip.rawInfo.tien_te || "VNĐ"}</span>
                 </div> */}
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Tổng chi phí:</span>
-                  <span className="font-semibold">{trip.totalExpense || formatCurrencyValue(trip.expenses?.total || 0, trip.rawInfo.tien_te)}</span>
+                  <span className="text-gray-600">Tổng ngân sách:</span>
+                  <span className="font-semibold">{formatCurrencyValue(trip.rawInfo.tong_ngan_sach, trip.rawInfo.tien_te)}</span>
                 </div>
                 {/* <div className="flex justify-between">
                   <span className="text-gray-600">Chủ sở hữu ID:</span>

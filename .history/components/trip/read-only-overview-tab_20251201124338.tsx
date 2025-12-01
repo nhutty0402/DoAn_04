@@ -26,21 +26,16 @@ export function ReadOnlyOverviewTab({ trip }: ReadOnlyOverviewTabProps) {
       description: "Chuyến đi nhóm",
     },
     {
-      title: "Địa điểm xuất phát",
-      value: ` địa điểm`,
+      title: "Đ điểm xuất phát",
+      value: `${trip.highlights?.length || 3} địa điểm`,
       icon: <MapPin className="h-5 w-5 text-primary" />,
       description: trip.destination,
     },
     {
-      title: "Tổng chi phí",
-      value: trip.totalExpense || trip.budget,
+      title: "Ngân sách",
+      value: trip.budget,
       icon: <DollarSign className="h-5 w-5 text-primary" />,
-      description: (() => {
-        const expenseValue = trip.totalExpense || trip.budget || "0"
-        const numericValue = Number.parseInt(expenseValue.replace(/[^\d]/g, "")) || 0
-        const perPerson = trip.memberCount > 0 ? Math.round(numericValue / trip.memberCount / 1000) : 0
-        return `${perPerson}K VNĐ/người`
-      })(),
+      description: `${Math.round(Number.parseInt(trip.budget.replace(/[^\d]/g, "")) / trip.memberCount / 1000)}K VNĐ/người`,
     },
   ]
 
