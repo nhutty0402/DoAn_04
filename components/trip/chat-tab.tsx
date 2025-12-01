@@ -8,10 +8,11 @@ import Cookies from "js-cookie"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Send, Paperclip, ImageIcon, Smile, Check, CheckCheck, X, Phone, Video, Search, Settings, MessageCircle } from "lucide-react"
+import { Send, Paperclip, ImageIcon, Smile, Check, CheckCheck, X, Phone, Video, Search, Settings, MessageCircle, MoreVertical, Trash2 } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { motion, AnimatePresence } from "framer-motion"
 import { useToast } from "@/hooks/use-toast"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 const mockMessages = [
   {
@@ -137,8 +138,10 @@ export function ChatTab({ tripId }: ChatTabProps) {
   const [isSending, setIsSending] = useState(false)
   const [loadingMessages, setLoadingMessages] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [retractingMessageId, setRetractingMessageId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const messageInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
   // Lấy currentUserId từ token
@@ -190,10 +193,11 @@ export function ChatTab({ tripId }: ChatTabProps) {
         userName: item.ho_ten || "Người dùng",
         content: item.noi_dung || "",
         timestamp: item.tao_luc || new Date().toISOString(),
-        type: item.kieu === "image" ? ("image" as const) : ("text" as const),
+        type: item.kieu === "image" ? ("image" as const) : item.kieu === "retracted" ? ("retracted" as const) : ("text" as const),
         images: item.tep_url ? [item.tep_url] : undefined,
         avatar_url: item.avatar_url && item.avatar_url !== "null" ? item.avatar_url : "",
         readBy: [],
+        isRetracted: item.kieu === "retracted",
       }))
 
       // Chỉ cập nhật nếu có tin nhắn mới (so sánh số lượng hoặc timestamp cuối cùng)
@@ -243,6 +247,14 @@ export function ChatTab({ tripId }: ChatTabProps) {
       fetchMessages(true)
     }
   }, [tripId, fetchMessages])
+
+  // ✅ Auto focus vào input khi component mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      messageInputRef.current?.focus()
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [])
 
   // ✅ Tự động cập nhật tin nhắn mới mỗi 3 giây
   useEffect(() => {
@@ -493,6 +505,66 @@ export function ChatTab({ tripId }: ChatTabProps) {
     return null
   }
 
+  // ✅ Hàm thu hồi tin nhắn
+  const handleRetractMessage = async (messageId: string) => {
+    const token = Cookies.get("token")
+    if (!token || token === "null" || token === "undefined") {
+      toast({
+        title: "Lỗi",
+        description: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setRetractingMessageId(messageId)
+    try {
+      const response = await axios.delete(
+        `https://travel-planner-imdw.onrender.com/api/tin-nhan/${messageId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      toast({
+        title: "Thành công",
+        description: response.data?.message || "Tin nhắn đã được thu hồi",
+      })
+
+      // Cập nhật tin nhắn trong state
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? {
+                ...msg,
+                content: "Tin nhắn đã được thu hồi",
+                type: "retracted" as const,
+                isRetracted: true,
+                images: undefined,
+              }
+            : msg
+        )
+      )
+
+      // Refresh danh sách tin nhắn sau 1 giây để đảm bảo đồng bộ
+      setTimeout(() => {
+        fetchMessages(false)
+      }, 1000)
+    } catch (error: any) {
+      console.error("❌ Lỗi khi thu hồi tin nhắn:", error)
+      toast({
+        title: "Lỗi",
+        description: error.response?.data?.message || error.message || "Không thể thu hồi tin nhắn",
+        variant: "destructive",
+      })
+    } finally {
+      setRetractingMessageId(null)
+    }
+  }
+
   const filteredMessages = messages.filter(
     (message) =>
       message.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -504,7 +576,7 @@ export function ChatTab({ tripId }: ChatTabProps) {
   const offlineMembers = mockMembers.filter((m) => m.status === "offline")
 
   return (
-    <div className="flex h-[700px] bg-background rounded-lg border border-border overflow-hidden shadow-lg">
+    <div className="flex h-[500px] bg-background rounded-lg border border-border overflow-hidden shadow-lg">
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
         {/* Enhanced Chat Header */}
@@ -513,7 +585,7 @@ export function ChatTab({ tripId }: ChatTabProps) {
             <div className="flex items-center gap-3">
               <div className="relative">
                 <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-                  <span className="text-primary-foreground font-semibold text-sm">TC</span>
+                  <span className="text-primary-foreground font-semibold text-sm">Chat</span>
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-background"></div>
               </div>
@@ -617,51 +689,92 @@ export function ChatTab({ tripId }: ChatTabProps) {
                       </Avatar>
                     </div>
 
-                    <div className={`flex-1 max-w-[70%] ${isCurrentUser ? "items-end" : "items-start"} flex flex-col`}>
+                    <div className={`flex-1 max-w-[70%] ${isCurrentUser ? "items-end" : "items-start"} flex flex-col group/message`}>
                       {showAvatar && !isCurrentUser && (
                         <span className="text-xs text-muted-foreground mb-1 font-medium">{message.userName}</span>
                       )}
 
-                      <div
-                        className={`px-4 py-2 rounded-2xl shadow-sm ${
-                          isCurrentUser
-                            ? "bg-primary text-primary-foreground rounded-br-md"
-                            : "bg-card text-foreground border border-border rounded-bl-md"
-                        }`}
-                      >
-                        {message.type === "image" && message.images ? (
-                          <div className="space-y-2">
-                            {message.images.map((img: string, imgIndex: number) => (
-                              <div key={imgIndex} className="relative group">
-                                <img
-                                  src={img || "/placeholder.svg"}
-                                  alt="Shared image"
-                                  className="rounded-lg max-w-[300px] max-h-[400px] w-auto h-auto object-contain cursor-pointer hover:opacity-90 transition-opacity"
-                                  onClick={() => window.open(img, "_blank")}
-                                  onLoad={(e) => {
-                                    // Tự động điều chỉnh kích thước ảnh
-                                    const imgElement = e.target as HTMLImageElement
-                                    const maxWidth = 300
-                                    const maxHeight = 400
-                                    const ratio = Math.min(maxWidth / imgElement.naturalWidth, maxHeight / imgElement.naturalHeight, 1)
-                                    if (ratio < 1) {
-                                      imgElement.style.width = `${imgElement.naturalWidth * ratio}px`
-                                      imgElement.style.height = `${imgElement.naturalHeight * ratio}px`
-                                    }
-                                  }}
-                                  style={{ maxWidth: "300px", maxHeight: "400px" }}
-                                />
-                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-lg transition-colors pointer-events-none" />
-                              </div>
-                            ))}
-                            {message.content && (
-                              <p className="text-sm font-[family-name:var(--font-dm-sans)] mt-2">{message.content}</p>
-                            )}
-                          </div>
-                        ) : (
-                          <p className="text-sm font-[family-name:var(--font-dm-sans)] leading-relaxed">
-                            {message.content}
-                          </p>
+                      <div className={`flex items-center gap-2 ${isCurrentUser ? "flex-row-reverse" : ""}`}>
+                        <div
+                          className={`px-4 py-2 rounded-2xl shadow-sm relative ${
+                            isCurrentUser
+                              ? "bg-primary text-primary-foreground rounded-br-md"
+                              : "bg-card text-foreground border border-border rounded-bl-md"
+                          } ${(message as any).isRetracted || message.type === "retracted" ? "opacity-60 italic" : ""}`}
+                        >
+                          {(message as any).isRetracted || message.type === "retracted" ? (
+                            <p className="text-sm font-[family-name:var(--font-dm-sans)] leading-relaxed text-muted-foreground">
+                              Tin nhắn đã được thu hồi
+                            </p>
+                          ) : message.type === "image" && message.images ? (
+                            <div className="space-y-2">
+                              {message.images.map((img: string, imgIndex: number) => (
+                                <div key={imgIndex} className="relative group">
+                                  <img
+                                    src={img || "/placeholder.svg"}
+                                    alt="Shared image"
+                                    className="rounded-lg max-w-[300px] max-h-[400px] w-auto h-auto object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                                    onClick={() => window.open(img, "_blank")}
+                                    onLoad={(e) => {
+                                      // Tự động điều chỉnh kích thước ảnh
+                                      const imgElement = e.target as HTMLImageElement
+                                      const maxWidth = 300
+                                      const maxHeight = 400
+                                      const ratio = Math.min(maxWidth / imgElement.naturalWidth, maxHeight / imgElement.naturalHeight, 1)
+                                      if (ratio < 1) {
+                                        imgElement.style.width = `${imgElement.naturalWidth * ratio}px`
+                                        imgElement.style.height = `${imgElement.naturalHeight * ratio}px`
+                                      }
+                                    }}
+                                    style={{ maxWidth: "300px", maxHeight: "400px" }}
+                                  />
+                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-lg transition-colors pointer-events-none" />
+                                </div>
+                              ))}
+                              {message.content && (
+                                <p className="text-sm font-[family-name:var(--font-dm-sans)] mt-2">{message.content}</p>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-sm font-[family-name:var(--font-dm-sans)] leading-relaxed">
+                              {message.content}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Dropdown menu để thu hồi tin nhắn (chỉ hiển thị cho tin nhắn của user hiện tại và chưa bị thu hồi) */}
+                        {isCurrentUser && !(message as any).isRetracted && message.type !== "retracted" && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 opacity-0 group-hover/message:opacity-100 transition-opacity"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreVertical className="h-3 w-3" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align={isCurrentUser ? "end" : "start"}>
+                              <DropdownMenuItem
+                                onClick={() => handleRetractMessage(message.id)}
+                                disabled={retractingMessageId === message.id}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                {retractingMessageId === message.id ? (
+                                  <>
+                                    <div className="h-3 w-3 border-2 border-destructive border-t-transparent rounded-full animate-spin mr-2" />
+                                    Đang thu hồi...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Thu hồi tin nhắn
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
                       </div>
 
@@ -802,6 +915,7 @@ export function ChatTab({ tripId }: ChatTabProps) {
             </Button>
             <div className="flex-1 relative">
               <Input
+                ref={messageInputRef}
                 value={newMessage}
                 onChange={(e) => handleTyping(e.target.value)}
                 placeholder="Nhập tin nhắn..."

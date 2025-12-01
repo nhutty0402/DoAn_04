@@ -561,7 +561,7 @@ export function MapsTab({ tripId }: MapsTabProps) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Navigation className="h-5 w-5 text-primary" />
-              Gợi ý khách sạn
+              Tìm kiếm khách sạn
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -610,7 +610,7 @@ export function MapsTab({ tripId }: MapsTabProps) {
               )}
 
               {loadingHotels && (
-                <p className="text-sm text-muted-foreground">Đang tải gợi ý khách sạn...</p>
+                <p className="text-sm text-muted-foreground">Đang tải kết quả tìm kiếm khách sạn...</p>
               )}
               {hotelError && (
                 <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
