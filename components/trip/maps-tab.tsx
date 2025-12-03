@@ -85,6 +85,10 @@ export function MapsTab({ tripId }: MapsTabProps) {
   // One-way flight search form
   const [flightFrom, setFlightFrom] = useState("")
   const [flightTo, setFlightTo] = useState("")
+  const [flightFromCode, setFlightFromCode] = useState<string | null>(null)
+  const [flightToCode, setFlightToCode] = useState<string | null>(null)
+  const [showFromSuggestions, setShowFromSuggestions] = useState(false)
+  const [showToSuggestions, setShowToSuggestions] = useState(false)
   const [flightDate, setFlightDate] = useState("")
   
   // Trip info
@@ -94,6 +98,278 @@ export function MapsTab({ tripId }: MapsTabProps) {
     ngay_bat_dau?: string
     ngay_ket_thuc?: string
   } | null>(null)
+
+  // Map key đã chuẩn hóa → mã sân bay
+  const AIRPORT_KEY_TO_CODE: Record<string, string> = {
+    // =============================
+    // Hà Nội – Nội Bài (HAN)
+    // =============================
+    han: "HAN",
+    hn: "HAN",
+    "ha-noi": "HAN",
+    hanoi: "HAN",
+    "ha-noi-airport": "HAN",
+    "noi-bai": "HAN",
+    "noi-bai-airport": "HAN",
+
+    // =============================
+    // TP. Hồ Chí Minh – Tân Sơn Nhất (SGN)
+    // =============================
+    sgn: "SGN",
+    hcm: "SGN",
+    "ho-chi-minh": "SGN",
+    hochiminh: "SGN",
+    "ho-chi-minh-city": "SGN",
+    "ho-chi-minh-airport": "SGN",
+    "sai-gon": "SGN",
+    saigon: "SGN",
+    tphcm: "SGN",
+    "tp-hcm": "SGN",
+    "tp-ho-chi-minh": "SGN",
+    "tan-son-nhat": "SGN",
+    "tan-son-nhat-airport": "SGN",
+
+    // =============================
+    // Đà Nẵng – Đà Nẵng (DAD)
+    // =============================
+    dad: "DAD",
+    dn: "DAD",
+    "da-nang": "DAD",
+    danang: "DAD",
+    "da-nang-airport": "DAD",
+
+    // =============================
+    // Nha Trang / Cam Ranh – Cam Ranh (CXR)
+    // =============================
+    cxr: "CXR",
+    "nha-trang": "CXR",
+    "nha-trang-airport": "CXR",
+    "cam-ranh": "CXR",
+    "cam-ranh-airport": "CXR",
+    nt: "CXR",
+
+    // =============================
+    // Phú Quốc (PQC)
+    // =============================
+    pqc: "PQC",
+    "phu-quoc": "PQC",
+    phuquoc: "PQC",
+    "phu-quoc-airport": "PQC",
+    pq: "PQC",
+
+    // =============================
+    // Cần Thơ (VCA)
+    // =============================
+    vca: "VCA",
+    "can-tho": "VCA",
+    cantho: "VCA",
+    "can-tho-airport": "VCA",
+    ct: "VCA",
+
+    // =============================
+    // Hải Phòng – Cát Bi (HPH)
+    // =============================
+    hph: "HPH",
+    "hai-phong": "HPH",
+    haiphong: "HPH",
+    "cat-bi": "HPH",
+    "cat-bi-airport": "HPH",
+    hp: "HPH",
+
+    // =============================
+    // Huế – Phú Bài (HUI)
+    // =============================
+    hui: "HUI",
+    hue: "HUI",
+    "phu-bai": "HUI",
+    "phu-bai-airport": "HUI",
+
+    // =============================
+    // Chu Lai (VCL)
+    // =============================
+    vcl: "VCL",
+    "chu-lai": "VCL",
+    chulai: "VCL",
+    "chu-lai-airport": "VCL",
+
+    // =============================
+    // Đồng Hới – Quảng Bình (VDH)
+    // =============================
+    vdh: "VDH",
+    "dong-hoi": "VDH",
+    "dong-hoi-airport": "VDH",
+    "quang-binh": "VDH",
+
+    // =============================
+    // Pleiku (PXU)
+    // =============================
+    pxu: "PXU",
+    pleiku: "PXU",
+    "pleiku-airport": "PXU",
+
+    // =============================
+    // Tuy Hòa – Phú Yên (TBB)
+    // =============================
+    tbb: "TBB",
+    "tuy-hoa": "TBB",
+    tuyhoa: "TBB",
+    "tuy-hoa-airport": "TBB",
+    "phu-yen": "TBB",
+
+    // =============================
+    // Quy Nhơn – Phù Cát (UIH)
+    // =============================
+    uih: "UIH",
+    "quy-nhon": "UIH",
+    quynhon: "UIH",
+    "phu-cat": "UIH",
+    "phu-cat-airport": "UIH",
+    "binh-dinh": "UIH",
+
+    // =============================
+    // Côn Đảo (VCS)
+    // =============================
+    vcs: "VCS",
+    "con-dao": "VCS",
+    condao: "VCS",
+    "con-dao-airport": "VCS",
+
+    // =============================
+    // Điện Biên (DIN)
+    // =============================
+    din: "DIN",
+    "dien-bien": "DIN",
+    dienbien: "DIN",
+    "dien-bien-airport": "DIN",
+
+    // =============================
+    // Buôn Ma Thuột (BMV)
+    // =============================
+    bmv: "BMV",
+    "buon-ma-thuot": "BMV",
+    "buon-me-thuot": "BMV",
+    "buon-ma-thuot-airport": "BMV",
+    "dak-lak": "BMV",
+    daklak: "BMV",
+
+    // =============================
+    // Đà Lạt – Liên Khương (DLI)
+    // =============================
+    dli: "DLI",
+    "da-lat": "DLI",
+    dalat: "DLI",
+    "lien-khuong": "DLI",
+    "lien-khuong-airport": "DLI",
+    "lam-dong": "DLI",
+
+    // =============================
+    // Rạch Giá (VKG)
+    // =============================
+    vkg: "VKG",
+    "rach-gia": "VKG",
+    rachgia: "VKG",
+    "rach-gia-airport": "VKG",
+    "kien-giang": "VKG",
+
+    // =============================
+    // Cà Mau (CAH)
+    // =============================
+    cah: "CAH",
+    "ca-mau": "CAH",
+    camau: "CAH",
+    "ca-mau-airport": "CAH",
+
+    // =============================
+    // Vinh (VII)
+    // =============================
+    vii: "VII",
+    vinh: "VII",
+    "vinh-airport": "VII",
+    "nghe-an": "VII",
+
+    // =============================
+    // Thanh Hóa – Thọ Xuân (THD)
+    // =============================
+    thd: "THD",
+    "thanh-hoa": "THD",
+    thanhhoa: "THD",
+    "tho-xuan": "THD",
+    thoxuan: "THD",
+    "tho-xuan-airport": "THD",
+
+    // =============================
+    // Quảng Ninh – Vân Đồn (VDO)
+    // =============================
+    vdo: "VDO",
+    "quang-ninh": "VDO",
+    quangninh: "VDO",
+    "van-don": "VDO",
+    vandon: "VDO",
+    "van-don-airport": "VDO",
+  }
+
+  const AIRPORTS = [
+    { code: "HAN", label: "Hà Nội – Nội Bài (HAN)" },
+    { code: "SGN", label: "TP. Hồ Chí Minh – Tân Sơn Nhất (SGN)" },
+    { code: "DAD", label: "Đà Nẵng – Đà Nẵng (DAD)" },
+    { code: "CXR", label: "Nha Trang / Cam Ranh – Cam Ranh (CXR)" },
+    { code: "PQC", label: "Phú Quốc (PQC)" },
+    { code: "VCA", label: "Cần Thơ (VCA)" },
+    { code: "HPH", label: "Hải Phòng – Cát Bi (HPH)" },
+    { code: "HUI", label: "Huế – Phú Bài (HUI)" },
+    { code: "VCL", label: "Chu Lai (VCL)" },
+    { code: "VDH", label: "Đồng Hới – Quảng Bình (VDH)" },
+    { code: "PXU", label: "Pleiku (PXU)" },
+    { code: "TBB", label: "Tuy Hòa – Phú Yên (TBB)" },
+    { code: "UIH", label: "Quy Nhơn – Phù Cát (UIH)" },
+    { code: "VCS", label: "Côn Đảo (VCS)" },
+    { code: "DIN", label: "Điện Biên (DIN)" },
+    { code: "BMV", label: "Buôn Ma Thuột (BMV)" },
+    { code: "DLI", label: "Đà Lạt – Liên Khương (DLI)" },
+    { code: "VKG", label: "Rạch Giá (VKG)" },
+    { code: "CAH", label: "Cà Mau (CAH)" },
+    { code: "VII", label: "Vinh (VII)" },
+    { code: "THD", label: "Thanh Hóa – Thọ Xuân (THD)" },
+    { code: "VDO", label: "Quảng Ninh – Vân Đồn (VDO)" },
+  ]
+
+  const normalizeAirportKey = (text: string) => {
+    return text
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/đ/g, "d")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+  }
+
+  const findAirportCode = (input: string): string | null => {
+    if (!input) return null
+    const upper = input.trim().toUpperCase()
+    const byCode = AIRPORTS.find((a) => a.code === upper)
+    if (byCode) return byCode.code
+
+    const key = normalizeAirportKey(input)
+    if (AIRPORT_KEY_TO_CODE[key]) return AIRPORT_KEY_TO_CODE[key]
+
+    return null
+  }
+
+  const filterAirports = (query: string) => {
+    const q = normalizeAirportKey(query)
+    if (!q) return AIRPORTS
+    return AIRPORTS.filter((airport) => {
+      const labelKey = normalizeAirportKey(airport.label)
+      if (labelKey.includes(q)) return true
+
+      // Kiểm tra theo các key đã map tới code này
+      const keysForCode = Object.entries(AIRPORT_KEY_TO_CODE)
+        .filter(([, code]) => code === airport.code)
+        .map(([key]) => key)
+
+      return keysForCode.some((k) => k.includes(q))
+    })
+  }
 
   // Các địa điểm phổ biến để gợi ý (hỗ trợ cả tiếng Việt có dấu và không dấu)
   const popularLocations = [
@@ -385,12 +661,21 @@ export function MapsTab({ tripId }: MapsTabProps) {
         return
       }
 
+      const resolvedFrom =
+        flightFromCode ||
+        findAirportCode(flightFrom) ||
+        flightFrom.trim()
+      const resolvedTo =
+        flightToCode ||
+        findAirportCode(flightTo) ||
+        flightTo.trim()
+
       const response = await axios.get(
         "https://travel-planner-imdw.onrender.com/api/ve-may-bay/goi-y-don-gian",
         {
           params: {
-            from: flightFrom.trim(),
-            to: flightTo.trim(),
+            from: resolvedFrom,
+            to: resolvedTo,
             ngay_di: flightDate,
           },
           headers: { Authorization: `Bearer ${token}` },
@@ -785,21 +1070,90 @@ export function MapsTab({ tripId }: MapsTabProps) {
         <CardContent>
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div>
+              <div className="relative">
                 <label className="text-sm font-medium mb-1 block">Đi từ</label>
                 <Input
                   value={flightFrom}
-                  onChange={(e) => setFlightFrom(e.target.value)}
+                  onChange={(e) => {
+                    setFlightFrom(e.target.value)
+                    setFlightFromCode(null)
+                  }}
+                  onFocus={() => setShowFromSuggestions(true)}
+                  onBlur={() => {
+                    // Delay để click được suggestion
+                    setTimeout(() => setShowFromSuggestions(false), 150)
+                  }}
                   placeholder="Ví dụ: Hà Nội, Ha Noi"
                 />
+                {showFromSuggestions && (
+                  <div className="absolute z-20 mt-1 w-full bg-popover border rounded-md shadow-lg max-h-60 overflow-auto text-sm">
+                    {filterAirports(flightFrom).map((airport) => (
+                      <button
+                        key={airport.code}
+                        type="button"
+                        className="w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground flex items-center justify-between"
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          setFlightFrom(airport.label)
+                          setFlightFromCode(airport.code)
+                          setShowFromSuggestions(false)
+                        }}
+                      >
+                        <span>{airport.label}</span>
+                        <span className="text-xs font-semibold text-primary ml-2">
+                          {airport.code}
+                        </span>
+                      </button>
+                    ))}
+                    {filterAirports(flightFrom).length === 0 && (
+                      <div className="px-3 py-2 text-xs text-muted-foreground">
+                        Không tìm thấy sân bay phù hợp
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              <div>
+              <div className="relative">
                 <label className="text-sm font-medium mb-1 block">Đến</label>
                 <Input
                   value={flightTo}
-                  onChange={(e) => setFlightTo(e.target.value)}
+                  onChange={(e) => {
+                    setFlightTo(e.target.value)
+                    setFlightToCode(null)
+                  }}
+                  onFocus={() => setShowToSuggestions(true)}
+                  onBlur={() => {
+                    setTimeout(() => setShowToSuggestions(false), 150)
+                  }}
                   placeholder="Ví dụ: Đà Nẵng, Da Nang"
                 />
+                {showToSuggestions && (
+                  <div className="absolute z-20 mt-1 w-full bg-popover border rounded-md shadow-lg max-h-60 overflow-auto text-sm">
+                    {filterAirports(flightTo).map((airport) => (
+                      <button
+                        key={airport.code}
+                        type="button"
+                        className="w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground flex items-center justify-between"
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          setFlightTo(airport.label)
+                          setFlightToCode(airport.code)
+                          setShowToSuggestions(false)
+                        }}
+                      >
+                        <span>{airport.label}</span>
+                        <span className="text-xs font-semibold text-primary ml-2">
+                          {airport.code}
+                        </span>
+                      </button>
+                    ))}
+                    {filterAirports(flightTo).length === 0 && (
+                      <div className="px-3 py-2 text-xs text-muted-foreground">
+                        Không tìm thấy sân bay phù hợp
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="text-sm font-medium mb-1 block">Ngày bay</label>

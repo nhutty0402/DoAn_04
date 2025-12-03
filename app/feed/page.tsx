@@ -650,6 +650,24 @@ interface TripFromAPI {
   chi_phi?: {
     tong_chi_phi?: string | number | null
   } | null
+  // Các trường từ API kham-pha
+  ten_chu_so_huu?: string | null
+  avatar_url?: string | null
+  avatar_chu_so_huu?: string | null
+  so_thanh_vien?: number | null
+  so_ngay?: number | null
+  diem_den?: DiemDen[] | null
+  // Các trường từ API hot
+  thoi_gian_tao?: string | null
+  diem_hot_tong_hop?: string | null
+}
+
+// Interface cho điểm đến
+interface DiemDen {
+  ten_diem_den: string
+  tong_ngay: number
+  ngay_dau?: number
+  ngay_cuoi?: number
 }
 
 // Interface cho trip hiển thị
@@ -676,6 +694,10 @@ interface DisplayTrip {
   isVerified: boolean
   da_thich: boolean
   tong_luot_thich: number
+  so_ngay: number
+  tao_luc: string
+  diem_den: DiemDen[]
+  diem_hot_tong_hop?: string
 }
 
 export default function PublicFeedPage() {
@@ -736,13 +758,36 @@ export default function PublicFeedPage() {
   }
 
   // Map data từ API sang format hiển thị
-  const mapTripFromAPI = (trip: TripFromAPI): DisplayTrip => {
+  const mapTripFromAPI = (trip: TripFromAPI, soNgayFromAPI?: number | null): DisplayTrip => {
     // ✅ Xử lý an toàn với null/undefined
     const moTa = trip.mo_ta || ""
     const ngayBatDau = trip.ngay_bat_dau || new Date().toISOString().split("T")[0]
     const ngayKetThuc = trip.ngay_ket_thuc || ngayBatDau
 
-    const duration = calculateDuration(ngayBatDau, ngayKetThuc)
+    // Sử dụng so_ngay từ API nếu có, nếu không thì tính toán
+    let duration: string
+    let soNgay: number
+    if (soNgayFromAPI !== undefined && soNgayFromAPI !== null && soNgayFromAPI > 0) {
+      soNgay = soNgayFromAPI
+      if (soNgay === 1) {
+        duration = "1 ngày"
+      } else {
+        const nights = soNgay - 1
+        duration = `${soNgay} ngày ${nights} đêm`
+      }
+    } else {
+      duration = calculateDuration(ngayBatDau, ngayKetThuc)
+      // Tính so_ngay từ duration string hoặc từ dates
+      const start = new Date(ngayBatDau)
+      const end = new Date(ngayKetThuc)
+      if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+        const diffTime = end.getTime() - start.getTime()
+        soNgay = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+      } else {
+        soNgay = 1
+      }
+    }
+
     const budget = formatBudget(trip.tong_ngan_sach || 0, trip.tien_te || "VNĐ")
     // Lấy tổng chi phí từ tong_chi_phi hoặc chi_phi.tong_chi_phi
     const tongChiPhi = trip.tong_chi_phi ?? trip.chi_phi?.tong_chi_phi ?? null
@@ -787,13 +832,13 @@ export default function PublicFeedPage() {
       duration,
       startDate: ngayBatDau,
       endDate: ngayKetThuc,
-      memberCount: trip.tong_thanh_vien || 1,
+      memberCount: trip.tong_thanh_vien || trip.so_thanh_vien || 1,
       viewCount: 0, // API không trả về, có thể thêm sau
       rating: 4.5, // API không trả về, có thể thêm sau
       tags,
       owner: {
-        name: trip.chu_so_huu_ten || "Người dùng",
-        avatar: trip.chu_so_huu_avatar || "/placeholder-user.jpg",
+        name: trip.chu_so_huu_ten || trip.ten_chu_so_huu || "Người dùng",
+        avatar: trip.chu_so_huu_avatar || trip.avatar_chu_so_huu || trip.avatar_url || "/placeholder-user.jpg",
       },
       coverImage: trip.url_avt || "/placeholder.svg",
       highlights,
@@ -802,6 +847,10 @@ export default function PublicFeedPage() {
       isVerified: trip.cong_khai === 1,
       da_thich: trip.da_thich || false,
       tong_luot_thich: trip.tong_luot_thich || 0,
+      so_ngay: soNgay,
+      tao_luc: trip.thoi_gian_tao || trip.tao_luc || "",
+      diem_den: trip.diem_den || [],
+      diem_hot_tong_hop: trip.diem_hot_tong_hop || "",
     }
   }
 
@@ -1024,6 +1073,147 @@ export default function PublicFeedPage() {
     }
   }
 
+  // Fetch danh sách chuyến đi Hot (mới)
+  const fetchHotTripsNew = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("Không có token → chuyển về /login")
+        router.replace("/login")
+        return
+      }
+
+      // Fetch danh sách chuyến đi đã thích trước để có likedTripIds
+      let currentLikedIds = new Set<string>()
+      try {
+        const likedResponse = await axios.get(
+          "https://travel-planner-imdw.onrender.com/api/chuyendi/da-thich",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        )
+        if (Array.isArray(likedResponse.data)) {
+          currentLikedIds = new Set(likedResponse.data.map((trip: any) => String(trip.chuyen_di_id)))
+          setLikedTripIds(currentLikedIds)
+        }
+      } catch (likedError) {
+        console.warn("Không thể lấy danh sách đã thích, sử dụng likedTripIds hiện tại")
+        currentLikedIds = likedTripIds
+      }
+
+      // Gọi API hot trips mới
+      const response = await axios.get(
+        "https://travel-planner-imdw.onrender.com/api/chuyendi/hot",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      console.log("✅ API Response (Hot Trips New):", response.data)
+
+      const data = Array.isArray(response.data) ? response.data : (response.data?.danh_sach || [])
+
+      // Map data từ API sang format hiển thị
+      const mappedTrips = data
+        .map((trip: any, index: number) => {
+          try {
+            // Tạo TripFromAPI từ response của API hot với đầy đủ các trường
+            const tripFromAPI: TripFromAPI = {
+              chuyen_di_id: trip.chuyen_di_id,
+              ten_chuyen_di: trip.ten_chuyen_di,
+              mo_ta: trip.mo_ta,
+              url_avt: trip.url_avt || null,
+              dia_diem_xuat_phat: trip.dia_diem_xuat_phat || null,
+              dia_diem_den: trip.dia_diem_den || null,
+              ngay_bat_dau: trip.ngay_bat_dau,
+              ngay_ket_thuc: trip.ngay_ket_thuc,
+              chu_so_huu_id: trip.chu_so_huu_id || 0,
+              tien_te: "VNĐ",
+              trang_thai: null,
+              tong_ngan_sach: null,
+              tao_luc: trip.thoi_gian_tao || trip.tao_luc || null,
+              cong_khai: 1,
+              chu_so_huu_ten: trip.ten_chu_so_huu,
+              chu_so_huu_avatar: trip.avatar_chu_so_huu || null,
+              tong_thanh_vien: trip.so_thanh_vien,
+              tong_luot_thich: trip.tong_luot_thich,
+              // Các trường từ API hot
+              ten_chu_so_huu: trip.ten_chu_so_huu,
+              avatar_chu_so_huu: trip.avatar_chu_so_huu,
+              so_thanh_vien: trip.so_thanh_vien,
+              so_ngay: trip.so_ngay,
+              diem_den: trip.diem_den || null,
+              thoi_gian_tao: trip.thoi_gian_tao,
+              diem_hot_tong_hop: trip.diem_hot_tong_hop,
+            }
+
+            // Truyền so_ngay từ API vào mapTripFromAPI
+            const displayTrip = mapTripFromAPI(tripFromAPI, trip.so_ngay)
+            const tripId = String(trip.chuyen_di_id)
+            
+            // Xử lý điểm đến - tính ngày đầu và ngày cuối cho mỗi điểm đến
+            const diemDenWithDates: DiemDen[] = []
+            if (trip.diem_den && Array.isArray(trip.diem_den) && trip.diem_den.length > 0) {
+              let currentDay = 1
+              trip.diem_den.forEach((diem: { ten_diem_den: string; tong_ngay: number }) => {
+                diemDenWithDates.push({
+                  ten_diem_den: diem.ten_diem_den,
+                  tong_ngay: diem.tong_ngay,
+                  ngay_dau: currentDay,
+                  ngay_cuoi: currentDay + diem.tong_ngay - 1,
+                })
+                currentDay += diem.tong_ngay
+              })
+            }
+            
+            // Đảm bảo các trường được set đúng
+            return {
+              ...displayTrip,
+              tong_luot_thich: trip.tong_luot_thich || 0,
+              da_thich: currentLikedIds.has(tripId),
+              so_ngay: trip.so_ngay || displayTrip.so_ngay,
+              diem_den: diemDenWithDates,
+              diem_hot_tong_hop: trip.diem_hot_tong_hop || "",
+              tao_luc: trip.thoi_gian_tao || displayTrip.tao_luc,
+            }
+          } catch (err) {
+            console.error(`❌ Lỗi khi map trip ${index}:`, err, trip)
+            return null
+          }
+        })
+        .filter((trip: DisplayTrip | null): trip is DisplayTrip => trip !== null)
+
+      setTrips(mappedTrips)
+      setFilteredTrips(mappedTrips)
+      console.log(`✅ Đã tải và map thành công ${mappedTrips.length} chuyến đi hot`)
+    } catch (error: any) {
+      console.error("❌ Lỗi khi tải danh sách chuyến đi hot:", error)
+      setError("Không thể tải danh sách chuyến đi hot. Vui lòng thử lại sau.")
+
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          toast.error("Phiên đăng nhập đã hết hạn")
+          router.replace("/login")
+        } else {
+          toast.error(error.response?.data?.message || "Có lỗi xảy ra khi tải danh sách chuyến đi hot")
+        }
+      } else {
+        toast.error("Có lỗi xảy ra khi tải danh sách chuyến đi hot")
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [router, likedTripIds])
+
   // Fetch danh sách chuyến đi đã thích
   const fetchLikedTrips = useCallback(async () => {
     setLoading(true)
@@ -1158,6 +1348,9 @@ export default function PublicFeedPage() {
       const response = await axios.get(
         "https://travel-planner-imdw.onrender.com/api/chuyendi/kham-pha",
         {
+          params: {
+            limit: 20,
+          },
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
@@ -1167,41 +1360,72 @@ export default function PublicFeedPage() {
 
       console.log("✅ API Response (Hot Trips):", response.data)
 
-      const data = Array.isArray(response.data) ? response.data : []
+      // Xử lý response mới với message, tong_so, danh_sach
+      const responseData = response.data
+      const data = responseData?.danh_sach || (Array.isArray(responseData) ? responseData : [])
+      const tongSo = responseData?.tong_so || data.length
+
+      console.log(`✅ Nhận được ${data.length} chuyến đi từ API (Tổng số: ${tongSo})`)
 
       // Map data từ API sang format hiển thị
       const mappedTrips = data
         .map((trip: any, index: number) => {
           try {
-            // Tạo TripFromAPI từ response của API kham-pha
+            // Tạo TripFromAPI từ response của API kham-pha với đầy đủ các trường
             const tripFromAPI: TripFromAPI = {
               chuyen_di_id: trip.chuyen_di_id,
               ten_chuyen_di: trip.ten_chuyen_di,
               mo_ta: trip.mo_ta,
               url_avt: trip.url_avt || null,
-              dia_diem_xuat_phat: trip.dia_diem_den || trip.dia_diem_xuat_phat || null,
+              dia_diem_xuat_phat: trip.dia_diem_xuat_phat || null,
               dia_diem_den: trip.dia_diem_den || null,
               ngay_bat_dau: trip.ngay_bat_dau,
               ngay_ket_thuc: trip.ngay_ket_thuc,
-              chu_so_huu_id: trip.chu_so_huu_id,
+              chu_so_huu_id: trip.chu_so_huu_id || 0,
               tien_te: "VNĐ", // API không trả về, mặc định VNĐ
               trang_thai: null,
               tong_ngan_sach: null,
               tao_luc: trip.tao_luc,
               cong_khai: 1, // Chuyến đi hot thường là công khai
               chu_so_huu_ten: trip.ten_chu_so_huu,
-              chu_so_huu_avatar: trip.avatar_url,
+              chu_so_huu_avatar: trip.avatar_chu_so_huu || trip.avatar_url || null,
               tong_thanh_vien: trip.so_thanh_vien,
               tong_luot_thich: trip.tong_luot_thich,
+              // Các trường từ API kham-pha
+              ten_chu_so_huu: trip.ten_chu_so_huu,
+              avatar_url: trip.avatar_url,
+              avatar_chu_so_huu: trip.avatar_chu_so_huu,
+              so_thanh_vien: trip.so_thanh_vien,
+              so_ngay: trip.so_ngay,
+              diem_den: trip.diem_den || null,
             }
 
-            const displayTrip = mapTripFromAPI(tripFromAPI)
+            // Truyền so_ngay từ API vào mapTripFromAPI
+            const displayTrip = mapTripFromAPI(tripFromAPI, trip.so_ngay)
             const tripId = String(trip.chuyen_di_id)
+            
+            // Xử lý điểm đến - tính ngày đầu và ngày cuối cho mỗi điểm đến
+            const diemDenWithDates: DiemDen[] = []
+            if (trip.diem_den && Array.isArray(trip.diem_den) && trip.diem_den.length > 0) {
+              let currentDay = 1
+              trip.diem_den.forEach((diem: { ten_diem_den: string; tong_ngay: number }) => {
+                diemDenWithDates.push({
+                  ten_diem_den: diem.ten_diem_den,
+                  tong_ngay: diem.tong_ngay,
+                  ngay_dau: currentDay,
+                  ngay_cuoi: currentDay + diem.tong_ngay - 1,
+                })
+                currentDay += diem.tong_ngay
+              })
+            }
+            
             // Đảm bảo tong_luot_thich và da_thich được set đúng
             return {
               ...displayTrip,
               tong_luot_thich: trip.tong_luot_thich || 0,
               da_thich: currentLikedIds.has(tripId),
+              so_ngay: trip.so_ngay || displayTrip.so_ngay,
+              diem_den: diemDenWithDates,
             }
           } catch (err) {
             console.error(`❌ Lỗi khi map trip ${index}:`, err, trip)
@@ -1211,7 +1435,7 @@ export default function PublicFeedPage() {
         .filter((trip: DisplayTrip | null): trip is DisplayTrip => trip !== null)
 
       // Lọc ra các chuyến đi đã thích
-      const filteredHotTrips = mappedTrips.filter(trip => !currentLikedIds.has(trip.id))
+      const filteredHotTrips = mappedTrips.filter((trip: DisplayTrip) => !currentLikedIds.has(trip.id))
 
       setTrips(filteredHotTrips)
       setFilteredTrips(filteredHotTrips)
@@ -1238,7 +1462,7 @@ export default function PublicFeedPage() {
   // Fetch trips khi component mount hoặc khi filter thay đổi
   useEffect(() => {
     if (selectedFilter === "liked") {
-      fetchLikedTrips()
+      fetchHotTripsNew() // Gọi API hot mới khi chọn filter "Hot"
     } else if (selectedFilter === "popular") {
       fetchHotTrips()
     } else {
@@ -1419,7 +1643,7 @@ export default function PublicFeedPage() {
                       }
     `}
                   >
-                    Đã thích
+                   Hot
                   </Button>
 
                   {/* <Button
@@ -1438,23 +1662,23 @@ export default function PublicFeedPage() {
                   >
                     Mới nhất
                   </Button> */}
-                                  <div className="flex items-center">
-  <Link href="/dashboard" className="group">
-    <Button 
-      variant="outline" 
-      className="h-9 px-5 text-sm font-medium rounded-xl border border-gray-300/40 bg-white/50 backdrop-blur-sm 
+                  <div className="flex items-center">
+                    <Link href="/dashboard" className="group">
+                      <Button
+                        variant="outline"
+                        className="h-9 px-5 text-sm font-medium rounded-xl border border-gray-300/40 bg-white/50 backdrop-blur-sm 
                  text-sky-700 hover:text-sky-800 hover:bg-sky-50/60 hover:border-sky-300/60 
                  shadow-md hover:shadow-lg hover:shadow-sky-100/50 
                  transition-all duration-300 flex items-center gap-2"
-    >
-      {/* Icon nhà - dùng lucide-react, nếu chưa có thì cài: npm install lucide-react */}
-      <Home className="h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
-      <span>Trang Chủ</span>
-    </Button>
-  </Link>
-</div>
+                      >
+                        {/* Icon nhà - dùng lucide-react, nếu chưa có thì cài: npm install lucide-react */}
+                        <Home className="h-4 w-4 group-hover:scale-110 transition-transform duration-200" />
+                        <span>Trang Chủ</span>
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
-{/* NƠI ĐỂ CODE TRANG CHỦ */}
+                {/* NƠI ĐỂ CODE TRANG CHỦ */}
               </div>
             </div>
           </div>
@@ -1511,27 +1735,36 @@ export default function PublicFeedPage() {
                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                      <div className="absolute top-3 right-3">
-                        {trip.isVerified && (
-                          <div className="group relative inline-block">
-                            {/* Dấu 3 chấm dọc */}
-                            <button
-                              onClick={(e) => openReportDialog(trip.id, e)}
-                              className="p-2 rounded-full hover:bg-gray-100 transition z-10"
-                              title="Báo cáo chuyến đi"
-                            >
-                              <MoreVertical className="h-4 w-4 text-gray-600" />
-                            </button>
-                          </div>
-                        )}
+
+                      {/* Badge số lượt thích nổi bật - góc trên trái */}
+                      {trip.tong_luot_thich > 0 && (
+                        <div className="absolute top-3 left-3 z-10">
+                          <Badge className="bg-yellow-500/90 backdrop-blur-sm text-white text-xs font-medium px-2 py-1 shadow-md">
+                            <Star className="h-3 w-3 mr-1 fill-white" />
+                            {trip.tong_luot_thich}
+                          </Badge>
+                        </div>
+                      )}
+
+                      {/* Nút báo cáo - góc trên phải */}
+                      <div className="absolute top-3 right-3 z-10">
+                        <button
+                          onClick={(e) => openReportDialog(trip.id, e)}
+                          className="p-2 rounded-full bg-white/80 backdrop-blur-sm hover:bg-white transition z-10 shadow-md"
+                          title="Báo cáo chuyến đi"
+                        >
+                          <MoreVertical className="h-4 w-4 text-gray-600" />
+                        </button>
                       </div>
 
-                      {/* Tổng chi phí chuyến đi */}
-                      <div className="absolute bottom-3 left-3">
-                        <span className="bg-blue-600 text-white px-3 py-1.5 rounded-full text-sm font-bold shadow-lg">
-                          {trip.totalExpense}
-                        </span>
-                      </div>
+                      {/* Tổng chi phí chuyến đi - chỉ hiển thị khi có giá trị */}
+                      {trip.totalExpense && trip.totalExpense !== "Chưa cập nhật VNĐ" && (
+                        <div className="absolute bottom-3 left-3 z-10">
+                          <span className="bg-blue-600/90 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-sm font-bold shadow-lg">
+                            {trip.totalExpense}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <CardContent className="p-4 space-y-3">
@@ -1540,50 +1773,122 @@ export default function PublicFeedPage() {
                         {trip.title}
                       </h3>
 
+                      {/* Description - hiển thị mô tả ngắn */}
+                      {trip.description && (
+                        <p className="text-sm text-gray-600 line-clamp-2">
+                          {trip.description}
+                        </p>
+                      )}
+
+                      {/* Điểm Hot Tổng Hợp - hiển thị nổi bật */}
+                      {trip.diem_hot_tong_hop && (
+                        <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-lg px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <Star className="h-4 w-4 text-yellow-600 fill-yellow-600" />
+                            <span className="text-sm font-semibold text-yellow-800">
+                              Điểm Hot:
+                            </span>
+                            <span className="text-sm text-yellow-900 flex-1">
+                              {trip.diem_hot_tong_hop}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Destination + Duration - ngang hàng, gọn */}
-                      <div className="flex items-center gap-4 text-sm text-gray-600">
-                        <div className="flex items-center gap-1.5">
-                          <MapPin className="h-4 w-4 text-blue-600" />
-                          <span className="font-medium">{trip.destination}</span>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-4 text-sm text-gray-600 flex-wrap">
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="h-4 w-4 text-blue-600" />
+                            <span className="font-medium">{trip.destination}</span>
+                          </div>
+                          {trip.so_ngay > 0 && (
+                            <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-700">
+                              {trip.so_ngay} ngày
+                            </Badge>
+                          )}
                         </div>
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="h-4 w-4 text-blue-600" />
-                          <span>{trip.duration}</span>
-                        </div>
+                        {/* Ngày bắt đầu và kết thúc */}
+                        {trip.startDate && trip.endDate && (
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <Calendar className="h-3.5 w-3.5 text-blue-600" />
+                            <span>
+                              {new Date(trip.startDate).toLocaleDateString("vi-VN", {
+                                day: "2-digit",
+                                month: "2-digit",
+                              })}
+                              {" - "}
+                              {new Date(trip.endDate).toLocaleDateString("vi-VN", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                              })}
+                            </span>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Owner + Rating - nhỏ gọn */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-8 w-8">
-                            <AvatarImage src={trip.owner.avatar} />
-                            <AvatarFallback className="text-xs">
-                              {trip.owner.name[0]}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-sm font-medium text-gray-800">
-                            {trip.owner.name.split(" ").slice(-1)}
+                      {/* Điểm đến với ngày đầu và ngày cuối */}
+                      {trip.diem_den && trip.diem_den.length > 0 && (
+                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                          <div className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                            Điểm đến
+                          </div>
+                          <div className="space-y-1.5">
+                            {trip.diem_den.map((diem: DiemDen, idx: number) => (
+                              <div
+                                key={idx}
+                                className="flex items-center justify-between text-xs bg-blue-50/50 rounded-lg px-2.5 py-1.5"
+                              >
+                                <span className="font-medium text-gray-800 flex-1">
+                                  {diem.ten_diem_den}
+                                </span>
+                                {diem.ngay_dau !== undefined && diem.ngay_cuoi !== undefined && (
+                                  <Badge variant="outline" className="text-xs border-blue-300 text-blue-700 bg-white">
+                                     {/* {diem.ngay_dau} */}
+                                    {diem.ngay_dau !== diem.ngay_cuoi && `  ${diem.ngay_cuoi}`} Ngày
+                                  </Badge>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Owner Info */}
+                      <div className="flex items-center gap-2 pt-1">
+                        <Avatar className="h-9 w-9 border-2 border-blue-100">
+                          <AvatarImage src={trip.owner.avatar} />
+                          <AvatarFallback className="text-xs bg-blue-50 text-blue-700">
+                            {trip.owner.name[0]?.toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col flex-1 min-w-0">
+                          <span className="text-sm font-semibold text-gray-800 truncate">
+                            {trip.owner.name}
                           </span>
-                        </div>
-                        <div className="flex items-center gap-1 invisible">
-                          {/* hoặc dùng hidden phần sao đánh giá */}
-                          {/* <div className="flex items-center gap-1 hidden"> */}
-                          <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                          <span className="text-sm font-bold text-gray-700">{trip.rating}</span>
+                          {trip.tao_luc && (
+                            <span className="text-xs text-gray-500">
+                              Tạo {new Date(trip.tao_luc).toLocaleDateString("vi-VN", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                              })}
+                            </span>
+                          )}
                         </div>
                       </div>
 
-
-                      {/* Thành viên */}
-                      <div className="flex items-center justify-between text-sm">
+                      {/* Stats: Thành viên + Lượt thích */}
+                      <div className="flex items-center justify-between text-sm pt-2 border-t border-gray-100">
                         <div className="flex items-center gap-1.5 text-gray-600">
                           <Users className="h-4 w-4 text-blue-600" />
-                          <span>{trip.memberCount} thành viên</span>
+                          <span className="font-medium">{trip.memberCount} thành viên</span>
                         </div>
 
-                        {/* thích */}
+                        {/* Thích button */}
                         <Badge
-                          className={`cursor-pointer text-xs font-medium px-2 py-1 shadow-md transition-colors duration-200 group ${trip.da_thich
+                          className={`cursor-pointer text-xs font-medium px-3 py-1.5 shadow-md transition-colors duration-200 group ${trip.da_thich
                             ? "bg-yellow-500 text-yellow-50 hover:bg-yellow-600"
                             : "bg-emerald-500 text-white hover:bg-yellow-500 hover:text-yellow-50"
                             }`}
@@ -1594,11 +1899,8 @@ export default function PublicFeedPage() {
                           }}
                         >
                           <Star className={`h-3 w-3 mr-1 transition-colors duration-200 ${trip.da_thich ? "fill-yellow-200" : "group-hover:fill-yellow-200"}`} />
-                          {trip.tong_luot_thich > 0 && (
-                            <span className="ml-1">{trip.tong_luot_thich}</span>
-                          )}
+                          <span>{trip.tong_luot_thich || 0}</span>
                         </Badge>
-
                       </div>
                     </CardContent>
                   </Card>
