@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Clock, MapPin, Calendar, Navigation, FileText, Globe } from "lucide-react"
+import { Clock, MapPin, Calendar, Navigation, FileText, Globe, Clock3 } from "lucide-react"
 
 interface ReadOnlyItineraryTabProps {
   itinerary: any[]
@@ -46,34 +46,53 @@ export function ReadOnlyItineraryTab({ itinerary }: ReadOnlyItineraryTabProps) {
 
     {/* Itinerary Days */}
     {itinerary?.map((day: any, dayIndex: number) => (
-      <Card key={dayIndex || day.lich_trinh_ngay_id}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-              {day.day}
-            </div>
-            {day.title}
-          </CardTitle>
-          {/* <div className="space-y-1 mt-2">
-            <p className="text-sm text-gray-600">{day.date}</p>
-            {day.ngay && (
-              <p className="text-xs text-gray-500">Ngày gốc: {day.ngay}</p>
-            )}
-            {day.ghi_chu && (
-              <div className="flex items-start gap-2 mt-2 p-2 bg-blue-50 rounded-md">
-                <FileText className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-gray-700">{day.ghi_chu}</p>
+      <Card key={dayIndex || day.lich_trinh_ngay_id} className="overflow-hidden">
+        <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100/50 border-b border-blue-200">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-md flex-shrink-0">
+                {day.day}
               </div>
-            )}
-            {day.lich_trinh_ngay_id && (
-              <p className="text-xs text-gray-400">ID: {day.lich_trinh_ngay_id}</p>
-            )}
-          </div> */}
+              <div className="flex-1 min-w-0">
+                <CardTitle className="text-lg font-bold text-gray-900 mb-1">
+                  {day.tieu_de || day.title || `Ngày ${day.day}`}
+                </CardTitle>
+                <div className="flex items-center gap-3 flex-wrap text-sm text-gray-600">
+                  {day.date && (
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="h-4 w-4 text-blue-600" />
+                      <span>{day.date}</span>
+                    </div>
+                  )}
+                  {day.dayTimeRange && (
+                    <div className="flex items-center gap-1.5">
+                      <Clock3 className="h-4 w-4 text-blue-600" />
+                      <span>{day.dayTimeRange}</span>
+                    </div>
+                  )}
+                  {day.diem_den && day.diem_den.ten_diem_den && (
+                    <div className="flex items-center gap-1.5 bg-blue-100 px-2 py-1 rounded-full">
+                      <MapPin className="h-3.5 w-3.5 text-blue-700" />
+                      <span className="font-medium text-blue-700">{day.diem_den.ten_diem_den}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Ghi chú ngày */}
+          {day.ghi_chu && (
+            <div className="flex items-start gap-2 mt-3 p-3 bg-white/80 rounded-lg border border-blue-200">
+              <FileText className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-gray-700 leading-relaxed">{day.ghi_chu}</p>
+            </div>
+          )}
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <div className="space-y-4">
             {day.activities?.map((activity: any, actIndex: number) => (
-              <div key={actIndex || activity.dia_diem_id} className="flex gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div key={actIndex || activity.dia_diem_id} className="flex gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
                 <div className="flex-shrink-0">
                   <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                     <Clock className="h-5 w-5 text-blue-600" />
@@ -82,19 +101,24 @@ export function ReadOnlyItineraryTab({ itinerary }: ReadOnlyItineraryTabProps) {
                 <div className="flex-1 space-y-3">
                   {/* Header với thời gian và loại */}
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    {/* <span className="text-sm font-semibold text-blue-600">{activity.time}</span>
-                    <Badge variant="outline" className="text-xs">
-                      {activity.duration}
-                    </Badge> */}
+                    {activity.time && activity.time !== "--:--" && (
+                      <span className="text-sm font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                        {activity.time}
+                      </span>
+                    )}
+                    {activity.duration && activity.duration !== "Không rõ" && (
+                      <Badge variant="outline" className="text-xs border-blue-300 text-blue-700">
+                        {activity.duration}
+                      </Badge>
+                    )}
                     <Badge className={`text-xs ${getActivityTypeColor(activity.type)}`}>
                       {getActivityTypeLabel(activity.type)}
                     </Badge>
-                    {/* poi hotel */}
-                    {/* {activity.loai_dia_diem && (
+                    {activity.loai_dia_diem && (
                       <Badge variant="outline" className="text-xs text-gray-600">
                         {activity.loai_dia_diem}
                       </Badge>
-                    )} */}
+                    )}
                   </div>
 
                   {/* Tên địa điểm */}
@@ -115,50 +139,38 @@ export function ReadOnlyItineraryTab({ itinerary }: ReadOnlyItineraryTabProps) {
                   )}
 
                   {/* Thông tin chi tiết */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2 border-t border-gray-200">
-                    {/* Tọa độ */}
-                    {(activity.vi_do !== null || activity.kinh_do !== null) && (
-                      <div className="flex items-center gap-2 text-xs text-gray-600">
-                        <Navigation className="h-3 w-3" />
-                        <span>
-                          {activity.vi_do !== null && activity.kinh_do !== null
-                            ? `${activity.vi_do}, ${activity.kinh_do}`
-                            : activity.vi_do !== null
-                            ? `Vĩ độ: ${activity.vi_do}`
-                            : `Kinh độ: ${activity.kinh_do}`}
-                        </span>
-                      </div>
-                    )}
+                  {(activity.thoi_gian_bat_dau || activity.thoi_gian_ket_thuc || activity.vi_do !== null || activity.kinh_do !== null) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2 border-t border-gray-200">
+                      {/* Thời gian chi tiết */}
+                      {(activity.thoi_gian_bat_dau || activity.thoi_gian_ket_thuc) && (
+                        <div className="flex items-center gap-2 text-xs text-gray-600">
+                          <Clock3 className="h-3.5 w-3.5 text-blue-600" />
+                          <div className="space-y-0.5">
+                            {activity.thoi_gian_bat_dau && (
+                              <div>Bắt đầu: <span className="font-medium">{activity.thoi_gian_bat_dau}</span></div>
+                            )}
+                            {activity.thoi_gian_ket_thuc && (
+                              <div>Kết thúc: <span className="font-medium">{activity.thoi_gian_ket_thuc}</span></div>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
-                    {/* Google Place ID */}
-                    {/* {activity.google_place_id && (
-                      <div className="flex items-center gap-2 text-xs text-gray-600">
-                        <Globe className="h-3 w-3" />
-                        <span className="truncate" title={activity.google_place_id}>
-                          Place ID: {activity.google_place_id}
-                        </span>
-                      </div>
-                    )} */}
-
-                    {/* ID địa điểm */}
-                    {/* {activity.dia_diem_id && (
-                      <div className="text-xs text-gray-500">
-                        ID: {activity.dia_diem_id}
-                      </div>
-                    )} */}
-
-                    {/* Thời gian chi tiết */}
-                    {/* {(activity.thoi_gian_bat_dau || activity.thoi_gian_ket_thuc) && (
-                      <div className="text-xs text-gray-500 space-y-0.5">
-                        {activity.thoi_gian_bat_dau && (
-                          <div>Bắt đầu: {activity.thoi_gian_bat_dau}</div>
-                        )}
-                        {activity.thoi_gian_ket_thuc && (
-                          <div>Kết thúc: {activity.thoi_gian_ket_thuc}</div>
-                        )}
-                      </div>
-                    )} */}
-                  </div>
+                      {/* Tọa độ */}
+                      {(activity.vi_do !== null || activity.kinh_do !== null) && (
+                        <div className="flex items-center gap-2 text-xs text-gray-600">
+                          <Navigation className="h-3.5 w-3.5 text-blue-600" />
+                          <span>
+                            {activity.vi_do !== null && activity.kinh_do !== null
+                              ? `${activity.vi_do}, ${activity.kinh_do}`
+                              : activity.vi_do !== null
+                              ? `Vĩ độ: ${activity.vi_do}`
+                              : `Kinh độ: ${activity.kinh_do}`}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import axios from "axios"
+import Cookies from "js-cookie"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -9,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
-import { ArrowLeft, Eye, Download, Star, Share2, Heart, AlertCircle, X, ChevronLeft, ChevronRight } from "lucide-react"
+import { ArrowLeft, Eye, Download, Star, Share2, Heart, AlertCircle, X, ChevronLeft, ChevronRight, Calendar, MapPin } from "lucide-react"
 import { motion } from "framer-motion"
 import Link from "next/link"
 import { ReadOnlyOverviewTab } from "@/components/trip/read-only-overview-tab"
@@ -51,10 +52,20 @@ interface ItineraryLocationAPI {
   thoi_gian_ket_thuc: string | null
 }
 
+interface ItineraryDiemDenAPI {
+  diem_den_id: number | null
+  ten_diem_den: string | null
+  thu_tu: number | null
+}
+
 interface ItineraryDayAPI {
   lich_trinh_ngay_id: number
   ngay: string | null
+  tieu_de: string | null
   ghi_chu: string | null
+  gio_bat_dau: string | null
+  gio_ket_thuc: string | null
+  diem_den: ItineraryDiemDenAPI | number | null
   dia_diem: ItineraryLocationAPI[]
 }
 
@@ -72,6 +83,8 @@ interface ExpenseDetailAPI {
   ngay: string | null
   nguoi_chi: string | null
   avatar_url: string | null
+  diem_den_id: number | null
+  ten_diem_den: string | null
 }
 
 interface ChiPhiAPI {
@@ -80,19 +93,40 @@ interface ChiPhiAPI {
   chi_tiet: ExpenseDetailAPI[] | null
 }
 
+interface DiemDenAPI {
+  diem_den_id: number | null
+  chuyen_di_id: number | null
+  ten_diem_den: string | null
+  thu_tu: number | null
+  ngay_du_kien: number | null
+  ghi_chu: string | null
+  tao_luc: string | null
+}
+
+interface BaiVietDiemDenAPI {
+  diem_den_id: number | null
+  ten_diem_den: string | null
+  thu_tu: number | null
+  ngay_du_kien: number | null
+}
+
 interface BaiVietAPI {
   bai_viet_id: number
   noi_dung: string | null
   anh_chinh: string | null
+  luot_thich: number | null
   tao_luc: string | null
+  nguoi_dung_id: number | null
   ho_ten: string | null
   avatar_url: string | null
   anh_phu: string[] | null
+  diem_den: BaiVietDiemDenAPI | null
 }
 
 interface TripDetailAPIResponse {
   message: string
-  thong_tin: TripInfoAPI
+  chuyen_di: TripInfoAPI
+  diem_den: DiemDenAPI[]
   lich_trinh: ItineraryDayAPI[]
   bai_viet: BaiVietAPI[]
   chi_phi: ChiPhiAPI | null
@@ -128,6 +162,7 @@ interface PublicTripDetail {
   expenseDetails: ExpenseDetailAPI[]
   posts: BaiVietAPI[]
   rawInfo: TripInfoAPI
+  diem_den: DiemDenAPI[]
 }
 
 const normalizeTime = (time: string | null): string => {
@@ -254,15 +289,52 @@ const buildItinerary = (itinerary: ItineraryDayAPI[]): any[] =>
       location: activity.ten_dia_diem || "Địa điểm chưa cập nhật",
       duration: formatTimeRange(activity.thoi_gian_bat_dau, activity.thoi_gian_ket_thuc),
       type: inferActivityType(activity.loai_dia_diem),
+      // Thêm các trường chi tiết
+      dia_diem_id: activity.dia_diem_id,
+      loai_dia_diem: activity.loai_dia_diem,
+      vi_do: activity.vi_do,
+      kinh_do: activity.kinh_do,
+      google_place_id: activity.google_place_id,
+      thoi_gian_bat_dau: activity.thoi_gian_bat_dau,
+      thoi_gian_ket_thuc: activity.thoi_gian_ket_thuc,
+      ghi_chu: activity.ghi_chu,
     }))
 
-    const titleParts = [`Ngày ${index + 1}`]
-    if (day.ghi_chu) titleParts.push(day.ghi_chu)
+    // ✅ Sử dụng tieu_de nếu có, nếu không thì dùng ghi_chu hoặc mặc định
+    const titleParts: string[] = []
+    if (day.tieu_de) {
+      titleParts.push(day.tieu_de)
+    } else {
+      titleParts.push(`Ngày ${index + 1}`)
+    }
+    if (day.ghi_chu && !day.tieu_de) {
+      titleParts.push(day.ghi_chu)
+    }
+
+    // ✅ Format thời gian bắt đầu và kết thúc của ngày nếu có
+    const dayTimeRange = formatTimeRange(day.gio_bat_dau, day.gio_ket_thuc)
+
+    // ✅ Xử lý diem_den - có thể là object hoặc number
+    let diemDenInfo: ItineraryDiemDenAPI | null = null
+    if (day.diem_den) {
+      if (typeof day.diem_den === 'object' && day.diem_den !== null) {
+        diemDenInfo = day.diem_den as ItineraryDiemDenAPI
+      }
+    }
 
     return {
       day: index + 1,
       title: titleParts.join(": "),
       date: formatDateDisplay(day.ngay),
+      dayTimeRange: dayTimeRange !== "Không rõ" ? dayTimeRange : undefined,
+      // ✅ Thêm các trường mới
+      tieu_de: day.tieu_de,
+      ghi_chu: day.ghi_chu,
+      gio_bat_dau: day.gio_bat_dau,
+      gio_ket_thuc: day.gio_ket_thuc,
+      diem_den: diemDenInfo,
+      lich_trinh_ngay_id: day.lich_trinh_ngay_id,
+      ngay: day.ngay,
       activities,
     }
   })
@@ -292,7 +364,8 @@ const buildExpenses = (chiPhi: ChiPhiAPI | null | undefined) => {
 }
 
 const mapTripDetailFromAPI = (payload: TripDetailAPIResponse): PublicTripDetail => {
-  const info = payload.thong_tin
+  // ✅ API mới sử dụng chuyen_di thay vì thong_tin
+  const info = payload.chuyen_di
   const startDate = info.ngay_bat_dau || info.ngay_ket_thuc || new Date().toISOString().split("T")[0]
   const endDate = info.ngay_ket_thuc || startDate
 
@@ -327,6 +400,7 @@ const mapTripDetailFromAPI = (payload: TripDetailAPIResponse): PublicTripDetail 
     expenseDetails: payload.chi_phi?.chi_tiet || [],
     posts: payload.bai_viet || [],
     rawInfo: info,
+    diem_den: payload.diem_den || [],
   }
 }
 
@@ -356,11 +430,30 @@ export default function PublicTripDetailPage() {
       setLoading(true)
       setError(null)
       try {
+        // ✅ Lấy token từ cookie
+        const token = Cookies.get("token") // ✅ lấy từ cookie
+        console.log("Token từ cookie:", token)
+
+        // ✅ Kiểm tra token hợp lệ
+        if (!token || token === "null" || token === "undefined") {
+          console.warn("Không có token → chuyển về /login")
+          router.replace("/login")
+          return
+        }
+
         const response = await axios.get<TripDetailAPIResponse>(
-          `https://travel-planner-imdw.onrender.com/api/chuyendi/cong-khai/${id}`
+          `https://travel-planner-imdw.onrender.com/api/chuyendi/${id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
         )
 
-        if (!response.data?.thong_tin) {
+        console.log("✅ API Response (Trip Detail):", response.data)
+
+        if (!response.data?.chuyen_di) {
           setTrip(null)
           setError("Không tìm thấy chuyến đi.")
           return
@@ -368,13 +461,19 @@ export default function PublicTripDetailPage() {
 
         setTrip(mapTripDetailFromAPI(response.data))
       } catch (err: unknown) {
+        console.error("❌ Lỗi khi tải chi tiết chuyến đi:", err)
         if (axios.isAxiosError(err)) {
-          const message =
-            err.response?.data?.message ||
-            (err.response?.status === 404 ? "Không tìm thấy chuyến đi." : "Không thể tải chi tiết chuyến đi.")
-          setError(message)
-          if (err.response?.status === 404) {
-            setTrip(null)
+          if (err.response?.status === 401) {
+            setError("Phiên đăng nhập đã hết hạn")
+            router.replace("/login")
+          } else {
+            const message =
+              err.response?.data?.message ||
+              (err.response?.status === 404 ? "Không tìm thấy chuyến đi." : "Không thể tải chi tiết chuyến đi.")
+            setError(message)
+            if (err.response?.status === 404) {
+              setTrip(null)
+            }
           }
         } else {
           setError("Đã xảy ra lỗi bất ngờ khi tải chi tiết chuyến đi.")
@@ -385,7 +484,7 @@ export default function PublicTripDetailPage() {
     }
 
     fetchTripDetail()
-  }, [params.id])
+  }, [params.id, router])
 
   const handleDownloadPDF = () => {
     if (!trip) return
@@ -591,8 +690,9 @@ export default function PublicTripDetailPage() {
           {/* Main Content */}
           <div className="lg:col-span-2">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-4 mb-8">
+              <TabsList className="grid w-full grid-cols-5 mb-8">
                 <TabsTrigger value="overview">Tổng quan</TabsTrigger>
+                <TabsTrigger value="diem-den">Điểm đến</TabsTrigger>
                 <TabsTrigger value="itinerary">Lịch trình</TabsTrigger>
                 <TabsTrigger value="expenses">Chi phí</TabsTrigger>
                 <TabsTrigger value="posts">Bài viết</TabsTrigger>
@@ -600,6 +700,72 @@ export default function PublicTripDetailPage() {
 
               <TabsContent value="overview" className="space-y-6">
                 <ReadOnlyOverviewTab trip={trip} />
+              </TabsContent>
+
+              <TabsContent value="diem-den" className="space-y-6">
+                {trip.diem_den && trip.diem_den.length > 0 ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <MapPin className="h-5 w-5 text-blue-600" />
+                        Danh sách điểm đến ({trip.diem_den.length})
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {trip.diem_den.map((diem, index) => (
+                          <div
+                            key={diem.diem_den_id || index}
+                            className="border border-gray-200 rounded-xl p-5 hover:shadow-md transition-all duration-200 bg-gradient-to-r from-white to-blue-50/30 hover:from-blue-50/50 hover:to-blue-100/30"
+                          >
+                            <div className="flex items-start gap-4">
+                              <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white font-bold text-base shadow-md flex-shrink-0">
+                                {diem.thu_tu || index + 1}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <MapPin className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                                  <h3 className="text-lg font-bold text-gray-900">
+                                    {diem.ten_diem_den || `Điểm đến ${index + 1}`}
+                                  </h3>
+                                </div>
+                                
+                                {diem.ghi_chu && (
+                                  <div className="mt-2 ml-6 p-3 bg-white/60 rounded-lg border border-gray-200">
+                                    <p className="text-sm text-gray-700 leading-relaxed">
+                                      {diem.ghi_chu}
+                                    </p>
+                                  </div>
+                                )}
+
+                                <div className="flex items-center gap-4 mt-3 ml-6 text-sm text-gray-600 flex-wrap">
+                                  {diem.ngay_du_kien !== null && diem.ngay_du_kien !== undefined && (
+                                    <div className="flex items-center gap-1.5 bg-blue-50 px-3 py-1.5 rounded-full">
+                                      <Calendar className="h-4 w-4 text-blue-600" />
+                                      <span className="font-medium">Ngày {diem.ngay_du_kien}</span>
+                                    </div>
+                                  )}
+                                  {diem.tao_luc && (
+                                    <div className="flex items-center gap-1.5 text-gray-500">
+                                      <span>Tạo: {formatDateDisplay(diem.tao_luc)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardContent className="py-12 text-center">
+                      <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600 text-base">Chưa có điểm đến nào được thêm vào chuyến đi này.</p>
+                    </CardContent>
+                  </Card>
+                )}
               </TabsContent>
 
               <TabsContent value="itinerary" className="space-y-6">
@@ -642,6 +808,7 @@ export default function PublicTripDetailPage() {
                                       <th className="px-5 py-3.5 text-left font-semibold text-gray-800">Ngày</th>
                                       <th className="px-5 py-3.5 text-left font-semibold text-gray-800">Nhóm</th>
                                       <th className="px-5 py-3.5 text-left font-semibold text-gray-800">Mô tả</th>
+                                      <th className="px-5 py-3.5 text-left font-semibold text-gray-800">Điểm đến</th>
                                       <th className="px-5 py-3.5 text-left font-semibold text-gray-800">Người chi</th>
                                       <th className="px-5 py-3.5 text-right font-semibold text-gray-800">Số tiền</th>
                                     </tr>
@@ -661,6 +828,9 @@ export default function PublicTripDetailPage() {
                                         </td>
                                         <td className="px-5 py-4 text-gray-700">
                                           {detail.mo_ta || "—"}
+                                        </td>
+                                        <td className="px-5 py-4 text-gray-600">
+                                          {detail.ten_diem_den || "—"}
                                         </td>
                                         <td className="px-5 py-4">
                                           <div className="flex items-center gap-3">
@@ -705,21 +875,34 @@ export default function PublicTripDetailPage() {
                       trip.posts.map((post) => (
                         <Card key={post.bai_viet_id} className="overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200">
                           <CardHeader className="pb-3">
-                            <div className="flex items-center gap-3">
-                              <Avatar className="h-10 w-10 ring-2 ring-white shadow-md">
-                                <AvatarImage src={post.avatar_url || DEFAULT_AVATAR} alt={post.ho_ten || "Người dùng"} />
-                                <AvatarFallback className="text-sm font-medium">
-                                  {post.ho_ten?.[0] || "U"}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <CardTitle className="text-base font-semibold text-gray-900">
-                                  {post.ho_ten || "Người dùng"}
-                                </CardTitle>
-                                <p className="text-xs text-gray-500">
-                                  {formatDateDisplay(post.tao_luc)}
-                                </p>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-10 w-10 ring-2 ring-white shadow-md">
+                                  <AvatarImage src={post.avatar_url || DEFAULT_AVATAR} alt={post.ho_ten || "Người dùng"} />
+                                  <AvatarFallback className="text-sm font-medium">
+                                    {post.ho_ten?.[0] || "U"}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <CardTitle className="text-base font-semibold text-gray-900">
+                                    {post.ho_ten || "Người dùng"}
+                                  </CardTitle>
+                                  <p className="text-xs text-gray-500">
+                                    {formatDateDisplay(post.tao_luc)}
+                                    {post.diem_den && (
+                                      <span className="ml-2 text-blue-600">
+                                        • {post.diem_den.ten_diem_den}
+                                      </span>
+                                    )}
+                                  </p>
+                                </div>
                               </div>
+                              {post.luot_thich !== null && post.luot_thich !== undefined && (
+                                <div className="flex items-center gap-1 text-sm text-gray-600">
+                                  <Heart className="h-4 w-4 text-red-500 fill-red-500" />
+                                  <span>{post.luot_thich}</span>
+                                </div>
+                              )}
                             </div>
                           </CardHeader>
 
@@ -901,6 +1084,47 @@ export default function PublicTripDetailPage() {
               </CardContent>
             </Card>
 
+            {/* Điểm đến */}
+            {trip.diem_den && trip.diem_den.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <MapPin className="h-5 w-5 text-blue-600" />
+                    Điểm đến ({trip.diem_den.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {trip.diem_den.map((diem, index) => (
+                      <div
+                        key={diem.diem_den_id || index}
+                        className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 bg-gray-50/50 hover:bg-gray-100/50 transition-colors"
+                      >
+                        <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex-shrink-0">
+                          {diem.thu_tu || index + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-sm text-gray-900 truncate">
+                            {diem.ten_diem_den || `Điểm đến ${index + 1}`}
+                          </h4>
+                          {diem.ngay_du_kien !== null && diem.ngay_du_kien !== undefined && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Ngày {diem.ngay_du_kien}
+                            </p>
+                          )}
+                          {diem.ghi_chu && (
+                            <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                              {diem.ghi_chu}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Khoảnh khắc */}
             {/* <Card>
               <CardHeader>
@@ -957,17 +1181,32 @@ export default function PublicTripDetailPage() {
                           key={post.bai_viet_id}
                           className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200"
                         >
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-9 w-9 ring-2 ring-white shadow">
-                              <AvatarImage src={post.avatar_url || DEFAULT_AVATAR} />
-                              <AvatarFallback className="text-xs font-medium">
-                                {post.ho_ten?.[0] || "U"}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="text-sm font-semibold text-gray-900">{post.ho_ten || "Người dùng"}</p>
-                              <p className="text-xs text-gray-500">{formatDateDisplay(post.tao_luc)}</p>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <Avatar className="h-9 w-9 ring-2 ring-white shadow">
+                                <AvatarImage src={post.avatar_url || DEFAULT_AVATAR} />
+                                <AvatarFallback className="text-xs font-medium">
+                                  {post.ho_ten?.[0] || "U"}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">{post.ho_ten || "Người dùng"}</p>
+                                <p className="text-xs text-gray-500">
+                                  {formatDateDisplay(post.tao_luc)}
+                                  {post.diem_den && (
+                                    <span className="ml-2 text-blue-600">
+                                      • {post.diem_den.ten_diem_den}
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
                             </div>
+                            {post.luot_thich !== null && post.luot_thich !== undefined && (
+                              <div className="flex items-center gap-1 text-xs text-gray-600">
+                                <Heart className="h-3.5 w-3.5 text-red-500 fill-red-500" />
+                                <span>{post.luot_thich}</span>
+                              </div>
+                            )}
                           </div>
 
                           <p className="mt-3 text-sm text-gray-700 leading-relaxed line-clamp-3">

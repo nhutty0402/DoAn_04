@@ -6,7 +6,7 @@ import Cookies from "js-cookie" // <-- THÊM
 import axios from "axios" // <-- THÊM
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Calendar, Clock, MapPin, GripVertical, Edit, Trash2, Pencil } from "lucide-react"
+import { Plus, Calendar, Clock, MapPin, GripVertical, Edit, Trash2, Pencil, DollarSign, Navigation } from "lucide-react"
 import { AddDayModal } from "@/components/itinerary/add-day-modal"
 import { AddPoiModal } from "@/components/itinerary/add-poi-modal"
 import { EditPoiModal } from "@/components/itinerary/edit-poi-modal"
@@ -173,20 +173,20 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
     }
   }
 
-  // <-- THÊM FUNCTION FETCH DAYS TỪ API -->
-  const fetchDaysFromAPI = async () => {
+  // <-- THÊM FUNCTION FETCH ĐIỂM ĐẾN TỪ API -->
+  const fetchDiemDenFromAPI = async () => {
     const token = Cookies.get("token")
 
     // Kiểm tra token
     if (!token || token === "null" || token === "undefined") {
-      console.warn("Không có token để fetch days")
+      console.warn("Không có token để fetch điểm đến")
       return []
     }
 
     try {
-      // Sử dụng axios params option để tránh vấn đề encoding
+      // Gọi API GET để lấy danh sách điểm đến
       const response = await axios.get(
-        `https://travel-planner-imdw.onrender.com/api/lich-trinh-ngay/${tripId}`,
+        `https://travel-planner-imdw.onrender.com/api/chuyen-di/${tripId}/diem-den`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -194,18 +194,42 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
         }
       )
 
-      // Chuyển đổi dữ liệu từ API (snake_case) sang state (camelCase)
-      const apiDays = response.data.danh_sach.map((day: any) => ({
-        id: day.lich_trinh_ngay_id,
-        ngay: day.ngay,
-        tieuDe: day.tieu_de,
-        ghiChu: day.ghi_chu,
-        pois: [], // Sẽ được map sau khi fetch POIs
-      }))
+      console.log("✅ API Response (Get Diem Den):", response.data)
+
+      // API trả về: { message, data: [...], tong_so }
+      const apiDiemDen = response.data?.data || []
+
+      // Chuyển đổi dữ liệu điểm đến thành format "days" để UI vẫn hoạt động
+      // Mỗi điểm đến sẽ được hiển thị như một "ngày" trong UI
+      const apiDays = apiDiemDen.map((diemDen: any) => {
+        // Sử dụng ngày bắt đầu nếu có, nếu không thì dùng ngày kết thúc, nếu không có thì dùng ngày hiện tại
+        const ngayHienThi = diemDen.ngay_bat_dau || diemDen.ngay_ket_thuc || new Date().toISOString().split('T')[0]
+        
+        // Tạo tiêu đề từ tên điểm đến và thứ tự
+        const tieuDe = diemDen.thu_tu 
+          ? ` #${diemDen.thu_tu}: ${diemDen.ten_diem_den}`
+          : diemDen.ten_diem_den
+
+        return {
+          id: String(diemDen.diem_den_id), // Sử dụng diem_den_id làm id
+          diem_den_id: diemDen.diem_den_id, // Giữ lại để reference
+          ngay: ngayHienThi,
+          tieuDe: tieuDe,
+          ghiChu: diemDen.ghi_chu || "",
+          thu_tu: diemDen.thu_tu,
+          ngay_bat_dau: diemDen.ngay_bat_dau,
+          ngay_ket_thuc: diemDen.ngay_ket_thuc,
+          dia_diem_xuat_phat: diemDen.dia_diem_xuat_phat,
+          tao_luc: diemDen.tao_luc,
+          so_luong_chi_phi: diemDen.so_luong_chi_phi,
+          tong_chi_phi_ngay: diemDen.tong_chi_phi_ngay,
+          pois: [], // Sẽ được map sau khi fetch POIs
+        }
+      })
 
       return apiDays
     } catch (error) {
-      console.error("Lỗi khi fetch days:", error)
+      console.error("Lỗi khi fetch điểm đến:", error)
 
       // Xử lý lỗi 401
       if (axios.isAxiosError(error) && error.response?.status === 401) {
@@ -215,28 +239,43 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
           variant: "destructive",
         })
         router.replace("/login")
+      } else if (axios.isAxiosError(error) && error.response?.status === 403) {
+        toast({
+          title: "Không có quyền",
+          description: "Bạn không có quyền xem điểm đến của chuyến đi này.",
+          variant: "destructive",
+        })
+      } else if (axios.isAxiosError(error) && error.response?.status === 404) {
+        console.warn("Không tìm thấy điểm đến cho chuyến đi này")
       }
 
       return [] // Trả về mảng rỗng nếu có lỗi
     }
   }
 
-  // <-- FUNCTION FETCH CẢ DAYS VÀ POIs -->
+  // <-- FUNCTION FETCH CẢ ĐIỂM ĐẾN VÀ POIs -->
   const fetchDaysAndPoisFromAPI = async () => {
     setIsLoadingDays(true)
 
     try {
-      // Fetch days và POIs song song
-      const [apiDays, apiPois] = await Promise.all([
-        fetchDaysFromAPI(),
+      // Fetch điểm đến và POIs song song
+      const [apiDiemDen, apiPois] = await Promise.all([
+        fetchDiemDenFromAPI(),
         fetchPoisFromAPI(),
       ])
 
-      // Map POIs vào đúng ngày dựa trên lich_trinh_ngay_id
-      const daysWithPois = apiDays.map((day: any) => ({
-        ...day,
+      // Map POIs vào đúng điểm đến dựa trên lich_trinh_ngay_id
+      // Lưu ý: POIs vẫn được map theo lich_trinh_ngay_id, nhưng giờ ta map vào điểm đến
+      // Nếu POI có lich_trinh_ngay_id trùng với id của điểm đến (hoặc cần logic khác)
+      const daysWithPois = apiDiemDen.map((diemDen: any) => ({
+        ...diemDen,
         pois: apiPois
-          .filter((poi: any) => String(poi.lich_trinh_ngay_id) === String(day.id))
+          .filter((poi: any) => {
+            // Map POIs vào điểm đến dựa trên logic phù hợp
+            // Tạm thời giữ nguyên logic cũ (map theo lich_trinh_ngay_id)
+            // Có thể cần điều chỉnh sau khi biết rõ cách backend map POI với điểm đến
+            return String(poi.lich_trinh_ngay_id) === String(diemDen.id)
+          })
           .sort((a: any, b: any) => a.gioBatDau.localeCompare(b.gioBatDau))
           .map((poi: any) => {
             // Loại bỏ lich_trinh_ngay_id khỏi POI object (không cần trong state)
@@ -245,15 +284,15 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
           }),
       }))
 
-      // Sắp xếp và đánh số thứ tự ngày
+      // Sắp xếp và đánh số thứ tự điểm đến
       updateDaysList(daysWithPois)
 
       toast({
         title: "Đã tải lịch trình",
-        description: `Đã tải ${daysWithPois.length} ngày và ${apiPois.length} điểm đến `,
+        description: `Đã tải ${daysWithPois.length} điểm đến và ${apiPois.length} địa điểm`,
       })
     } catch (error) {
-      console.error("Lỗi khi fetch days và POIs:", error)
+      console.error("Lỗi khi fetch điểm đến và POIs:", error)
       toast({
         title: "Lỗi tải dữ liệu",
         description: "Không thể tải lịch trình từ server. Sử dụng dữ liệu mẫu.",
@@ -297,35 +336,44 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
     return { isValid: true, message: "" }
   }
 
-  // <-- THÊM FUNCTION SẮP XẾP VÀ ĐÁNH SỐ THỨ TỰ NGÀY -->
+  // <-- FUNCTION SẮP XẾP THEO SỐ THỨ TỰ (thu_tu) -->
   const sortAndNumberDays = (daysList: any[]) => {
-    // Sắp xếp theo ngày (từ sớm đến muộn)
+    // Sắp xếp theo số thứ tự (thu_tu) - từ nhỏ đến lớn
     const sortedDays = [...daysList].sort((a, b) => {
-      const dateA = new Date(a.ngay)
-      const dateB = new Date(b.ngay)
-      return dateA.getTime() - dateB.getTime()
+      const thuTuA = a.thu_tu ?? 999999 // Nếu không có thu_tu, đặt cuối cùng
+      const thuTuB = b.thu_tu ?? 999999
+      return thuTuA - thuTuB
     })
 
-    // Đánh số thứ tự và cập nhật tiêu đề
-    const numberedDays = sortedDays.map((day, index) => {
-      const dayNumber = index + 1
-      const formattedDate = new Date(day.ngay).toLocaleDateString("vi-VN", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
-
-      const rawTitle = day.tieuDe || "" // nếu null hoặc undefined → chuỗi rỗng
+    // Giữ nguyên tiêu đề từ API (đã có format #${thu_tu}: ${ten_diem_den})
+    // Chỉ thêm formattedDate nếu cần
+    const numberedDays = sortedDays.map((day) => {
+      const formattedDate = day.ngay_bat_dau 
+        ? new Date(day.ngay_bat_dau).toLocaleDateString("vi-VN", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })
+        : day.ngay_ket_thuc
+        ? new Date(day.ngay_ket_thuc).toLocaleDateString("vi-VN", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })
+        : new Date(day.ngay).toLocaleDateString("vi-VN", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })
 
       return {
         ...day,
-        tieuDe: `Ngày ${dayNumber}: ${rawTitle.replace(/^Ngày \d+: /, '')}`,
-        dayNumber: dayNumber,
         formattedDate: formattedDate
       }
     })
-
 
     return numberedDays
   }
@@ -371,6 +419,41 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
 
   // <-- SỬA LẠI HOÀN TOÀN HÀM NÀY -->
   const handleAddDay = async (dayData: any) => {
+    // ✅ Kiểm tra xem đây là batch hay single
+    if (dayData.batch && Array.isArray(dayData.data)) {
+      // Đây là batch điểm đến đã được thêm thành công từ API
+      console.log("✅ Batch điểm đến đã được thêm thành công:", dayData)
+      
+      // Refresh lại danh sách để hiển thị điểm đến mới
+      await fetchDaysAndPoisFromAPI()
+      
+      toast({
+        title: "Thêm điểm đến thành công",
+        description: `Đã thêm ${dayData.tong_so} điểm đến vào chuyến đi`,
+      })
+      
+      setShowAddDayModal(false)
+      return
+    }
+
+    // ✅ Kiểm tra xem đây là dữ liệu điểm đến hay ngày
+    // Nếu có diem_den_id thì đây là điểm đến đã được thêm thành công từ modal
+    if (dayData.diem_den_id) {
+      // Đây là điểm đến đã được thêm thành công từ API
+      console.log("✅ Điểm đến đã được thêm thành công:", dayData)
+      
+      // Refresh lại danh sách để hiển thị điểm đến mới
+      await fetchDaysAndPoisFromAPI()
+      
+      toast({
+        title: "Thêm điểm đến thành công",
+        description: `Đã thêm điểm đến "${dayData.ten_diem_den}" vào chuyến đi`,
+      })
+      
+      setShowAddDayModal(false)
+      return
+    }
+
     // Nếu đang trong quá trình thêm, không cho bấm nữa
     if (isAddingDay) {
       console.log("Đang trong quá trình thêm ngày, bỏ qua request")
@@ -996,20 +1079,29 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
     }
   }
 
-  // <-- THÊM FUNCTION XÓA NGÀY VỚI API -->
+  // <-- FUNCTION XÓA ĐIỂM ĐẾN VỚI API -->
   const handleDeleteDay = async (dayId: string) => {
+    // Tìm điểm đến để lấy tên và diem_den_id
+    const dayToDelete = days.find((day) => day.id === dayId)
+    const diemDenId = (dayToDelete as any)?.diem_den_id || dayId
+    const tenDiemDen = (dayToDelete as any)?.tieuDe || "điểm đến này"
+
     // Xác nhận trước khi xóa
-    const confirmed = window.confirm("Bạn có chắc chắn muốn xóa ngày này khỏi lịch trình? Hành động này không thể hoàn tác.")
+    const confirmed = window.confirm(
+      `Bạn có chắc chắn muốn xóa điểm đến "${tenDiemDen}"? Hành động này không thể hoàn tác.`
+    )
     if (!confirmed) return
 
-    // Lấy token từ cookie
+    // ✅ Lấy token từ cookie
     const token = Cookies.get("token")
+    console.log("Token từ cookie:", token)
 
-    // Kiểm tra token
+    // ✅ Kiểm tra token hợp lệ
     if (!token || token === "null" || token === "undefined") {
+      console.warn("Không có token → chuyển về /login")
       toast({
         title: "Lỗi xác thực",
-        description: "Không tìm thấy token. Đang chuyển về trang đăng nhập.",
+        description: "Vui lòng đăng nhập để tiếp tục",
         variant: "destructive",
       })
       router.replace("/login")
@@ -1017,9 +1109,9 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
     }
 
     try {
-      // Gọi API DELETE để xóa ngày
+      // Gọi API DELETE để xóa điểm đến
       const response = await axios.delete(
-        `https://travel-planner-imdw.onrender.com/api/lich-trinh-ngay/${dayId}`,
+        `https://travel-planner-imdw.onrender.com/api/diem-den/${diemDenId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -1028,189 +1120,89 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
       )
 
       // Xử lý response từ API
-      console.log("Response từ API xóa ngày:", response.data)
+      console.log("✅ API Response (Delete Diem Den):", response.data)
 
-      // Cập nhật local state - xóa ngày khỏi danh sách và refresh POIs
-      const updatedDays = days.filter((day) => day.id !== dayId)
-      const updatedPois = await fetchPoisFromAPI()
-      const daysWithPois = updatedDays.map((day: any) => ({
-        ...day,
-        pois: updatedPois
-          .filter((poi: any) => String(poi.lich_trinh_ngay_id) === String(day.id))
-          .sort((a: any, b: any) => a.gioBatDau.localeCompare(b.gioBatDau))
-          .map((poi: any) => {
-            const { lich_trinh_ngay_id, ...poiWithoutDayId } = poi
-            return poiWithoutDayId
-          }),
-      }))
-      updateDaysList(daysWithPois)
+      const message = response.data?.message || "Xóa điểm đến thành công"
+      const canhBao = response.data?.canh_bao
 
-      toast({
-        title: "Đã xóa ngày",
-        description: "Ngày đã được xóa khỏi lịch trình thành công",
-      })
-    } catch (error) {
-      console.error("Lỗi khi xóa ngày:", error)
+      // Refresh lại danh sách điểm đến và POIs từ API
+      await fetchDaysAndPoisFromAPI()
 
-      // Xử lý lỗi 401
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
+      // Hiển thị toast với cảnh báo nếu có
+      if (canhBao) {
         toast({
-          title: "Phiên đăng nhập hết hạn",
-          description: "Token không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.",
-          variant: "destructive",
-        })
-        router.replace("/login")
-      } else if (axios.isAxiosError(error) && error.response?.status === 404) {
-        toast({
-          title: "Không tìm thấy ngày",
-          description: "Ngày này có thể đã bị xóa hoặc không tồn tại.",
-          variant: "destructive",
-        })
-      } else if (axios.isAxiosError(error) && error.response?.status === 403) {
-        toast({
-          title: "Không có quyền",
-          description: "Chỉ chủ chuyến đi mới được xóa ngày trong lịch trình.",
-          variant: "destructive",
+          title: message,
+          description: canhBao,
+          variant: "default",
         })
       } else {
         toast({
-          title: "Lỗi xóa ngày",
-          description: "Không thể xóa ngày. Vui lòng thử lại.",
+          title: "Đã xóa điểm đến",
+          description: message,
+        })
+      }
+    } catch (error: any) {
+      console.error("❌ Lỗi khi xóa điểm đến:", error)
+
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          toast({
+            title: "Phiên đăng nhập hết hạn",
+            description: "Vui lòng đăng nhập lại",
+            variant: "destructive",
+          })
+          router.replace("/login")
+        } else if (error.response?.status === 403) {
+          toast({
+            title: "Không có quyền",
+            description: error.response?.data?.message || "Chỉ chủ chuyến đi mới được xóa điểm đến",
+            variant: "destructive",
+          })
+        } else if (error.response?.status === 404) {
+          toast({
+            title: "Không tìm thấy điểm đến",
+            description: error.response?.data?.message || "Điểm đến này có thể đã bị xóa",
+            variant: "destructive",
+          })
+        } else if (error.response?.status === 500) {
+          toast({
+            title: "Lỗi server",
+            description: error.response?.data?.message || "Có lỗi xảy ra trên server. Vui lòng thử lại sau.",
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "Lỗi xóa điểm đến",
+            description: error.response?.data?.message || "Không thể xóa điểm đến. Vui lòng thử lại.",
+            variant: "destructive",
+          })
+        }
+      } else {
+        toast({
+          title: "Lỗi xóa điểm đến",
+          description: "Có lỗi xảy ra khi xóa điểm đến",
           variant: "destructive",
         })
       }
     }
   }
 
-  // <-- THÊM FUNCTION CHỈNH SỬA NGÀY VỚI API -->
+  // <-- FUNCTION CHỈNH SỬA ĐIỂM ĐẾN -->
+  // Lưu ý: API call đã được thực hiện trong edit-day-modal.tsx
+  // Hàm này chỉ refresh lại danh sách sau khi cập nhật thành công
   const handleEditDay = async (dayData: any) => {
-    // Lấy token từ cookie
-    const token = Cookies.get("token")
-
-    // Kiểm tra token
-    if (!token || token === "null" || token === "undefined") {
-      toast({
-        title: "Lỗi xác thực",
-        description: "Không tìm thấy token. Đang chuyển về trang đăng nhập.",
-        variant: "destructive",
-      })
-      router.replace("/login")
-      return
-    }
-
-    // Validation ngày nếu có thay đổi ngày
-    if (dayData.ngay && dayData.ngay !== editingDay?.ngay) {
-      const dateValidation = validateDayDate(dayData.ngay)
-      if (!dateValidation.isValid) {
-        toast({
-          title: "Ngày không hợp lệ",
-          description: dateValidation.message,
-          variant: "destructive",
-        })
-        return
-      }
-    }
-
-    try {
-      // Chuẩn bị payload cho API (theo backend code)
-      const payload = {
-        ngay: dayData.ngay,
-        tieu_de: dayData.tieuDe,
-        ghi_chu: dayData.ghiChu,
-      }
-
-      // Gọi API PUT với id trong URL (theo backend code)
-      const response = await axios.put(
-        `https://travel-planner-imdw.onrender.com/api/lich-trinh-ngay/${editingDay.id}`,
-        payload,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      )
-
-      // Xử lý response từ API
-      if (response.data && response.data.lich_trinh_ngay) {
-        console.log("Response từ API:", response.data)
-
-        // Cập nhật local state với dữ liệu từ API và refresh POIs
-        const updatedDays = days.map((day) =>
-          day.id === editingDay.id
-            ? {
-              ...day,
-              ngay: response.data.lich_trinh_ngay.ngay || dayData.ngay,
-              tieuDe: response.data.lich_trinh_ngay.tieu_de || dayData.tieuDe,
-              ghiChu: response.data.lich_trinh_ngay.ghi_chu || dayData.ghiChu
-            }
-            : day
-        )
-
-        // Refresh POIs và sắp xếp lại
-        const updatedPois = await fetchPoisFromAPI()
-        const daysWithPois = updatedDays.map((day: any) => ({
-          ...day,
-          pois: updatedPois
-            .filter((poi: any) => String(poi.lich_trinh_ngay_id) === String(day.id))
-            .sort((a: any, b: any) => a.gioBatDau.localeCompare(b.gioBatDau))
-            .map((poi: any) => {
-              const { lich_trinh_ngay_id, ...poiWithoutDayId } = poi
-              return poiWithoutDayId
-            }),
-        }))
-        updateDaysList(daysWithPois)
-        setEditingDay(null)
-
-        toast({
-          title: "Đã cập nhật ngày",
-          description: "Thông tin ngày đã được cập nhật thành công",
-        })
-      } else {
-        // Fallback nếu không có response data - vẫn refresh POIs
-        const updatedDays = days.map((day) =>
-          day.id === editingDay.id
-            ? { ...day, ...dayData }
-            : day
-        )
-
-        const updatedPois = await fetchPoisFromAPI()
-        const daysWithPois = updatedDays.map((day: any) => ({
-          ...day,
-          pois: updatedPois
-            .filter((poi: any) => String(poi.lich_trinh_ngay_id) === String(day.id))
-            .sort((a: any, b: any) => a.gioBatDau.localeCompare(b.gioBatDau))
-            .map((poi: any) => {
-              const { lich_trinh_ngay_id, ...poiWithoutDayId } = poi
-              return poiWithoutDayId
-            }),
-        }))
-        updateDaysList(daysWithPois)
-        setEditingDay(null)
-
-        toast({
-          title: "Đã cập nhật ngày",
-          description: "Thông tin ngày đã được cập nhật thành công",
-        })
-      }
-    } catch (error) {
-      console.error("Lỗi khi cập nhật ngày:", error)
-
-      // Xử lý lỗi 401
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        toast({
-          title: "Phiên đăng nhập hết hạn",
-          description: "Token không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.",
-          variant: "destructive",
-        })
-        router.replace("/login")
-      } else {
-        toast({
-          title: "Lỗi cập nhật",
-          description: "Không thể cập nhật thông tin ngày. Vui lòng thử lại.",
-          variant: "destructive",
-        })
-      }
-    }
+    console.log("✅ Điểm đến đã được cập nhật thành công:", dayData)
+    
+    // Refresh lại danh sách điểm đến và POIs từ API
+    await fetchDaysAndPoisFromAPI()
+    
+    // Đóng modal
+    setEditingDay(null)
+    
+    toast({
+      title: "Đã cập nhật điểm đến",
+      description: `Đã cập nhật điểm đến "${dayData.ten_diem_den || dayData.tieuDe}" thành công`,
+    })
   }
 
   const handleReorderDays = (newOrder: any[]) => {
@@ -1235,7 +1227,7 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
         </div>
         <Button onClick={() => setShowAddDayModal(true)} className="bg-primary hover:bg-primary/90">
           <Plus className="h-4 w-4 mr-2" />
-          Thêm Ngày
+          Thêm điểm đến
         </Button>
       </div>
 
@@ -1269,18 +1261,55 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
                             <div className="flex items-center gap-2 mt-1">
                               <Calendar className="h-4 w-4 text-muted-foreground" />
                               <span className="text-sm text-muted-foreground">
-                                {(day as any).formattedDate || new Date(day.ngay).toLocaleDateString("vi-VN", {
-                                  weekday: "long",
-                                  year: "numeric",
-                                  month: "long",
-                                  day: "numeric",
-                                })}
+                                {(day as any).ngay_bat_dau && (day as any).ngay_ket_thuc
+                                  ? `${new Date((day as any).ngay_bat_dau).toLocaleDateString("vi-VN")} - ${new Date((day as any).ngay_ket_thuc).toLocaleDateString("vi-VN")}`
+                                  : (day as any).ngay_bat_dau
+                                  ? `Từ ${new Date((day as any).ngay_bat_dau).toLocaleDateString("vi-VN")}`
+                                  : (day as any).ngay_ket_thuc
+                                  ? `Đến ${new Date((day as any).ngay_ket_thuc).toLocaleDateString("vi-VN")}`
+                                  : (day as any).formattedDate || new Date(day.ngay).toLocaleDateString("vi-VN", {
+                                      weekday: "long",
+                                      year: "numeric",
+                                      month: "long",
+                                      day: "numeric",
+                                    })}
                               </span>
+                              {/* Thứ tự */}
+                              {/* {(day as any).thu_tu && (
+                                <Badge variant="outline" className="text-xs">
+                                  Thứ tự: #{(day as any).thu_tu}
+                                </Badge>
+                              )} */}
                             </div>
                             {day.ghiChu && (
                               <p className="text-sm text-muted-foreground mt-1 font-[family-name:var(--font-dm-sans)]">
                                 {day.ghiChu}
                               </p>
+                            )}
+                            {/* Hiển thị địa điểm xuất phát */}
+                            {(day as any).dia_diem_xuat_phat && (
+                              <div className="flex items-center gap-1 mt-1">
+                                <Navigation className="h-3 w-3 text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground">
+                                  Xuất phát: {(day as any).dia_diem_xuat_phat}
+                                </span>
+                              </div>
+                            )}
+                            {/* Hiển thị thông tin chi phí */}
+                            {((day as any).so_luong_chi_phi > 0 || (day as any).tong_chi_phi_ngay) && (
+                              <div className="flex items-center gap-1 mt-1">
+                                <DollarSign className="h-3 w-3 text-green-600" />
+                                <span className="text-xs text-green-600 font-medium">
+                                  {(day as any).tong_chi_phi_ngay 
+                                    ? `${Number((day as any).tong_chi_phi_ngay).toLocaleString("vi-VN")} đ`
+                                    : "0 đ"}
+                                  {((day as any).so_luong_chi_phi > 0) && (
+                                    <span className="text-muted-foreground ml-1">
+                                      ({((day as any).so_luong_chi_phi)} giao dịch)
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -1296,8 +1325,9 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
                             className="bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"
                           >
                             <Plus className="h-4 w-4 mr-1" />
-                            Thêm Điểm
+                            Thêm Lịch Trình
                           </Button>
+                          {/* Xóa điểm đến */}
                           <Button
                             variant="outline"
                             size="sm"
@@ -1395,15 +1425,15 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
         </div>
       )}
 
-      {/* ... (phần không có lịch trình không đổi) ... */}
+      {/* Empty State - Không có điểm đến */}
       {!isLoadingDays && days.length === 0 && (
         <div className="text-center py-12">
-          <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-foreground mb-2">Chưa có lịch trình</h3>
-          <p className="text-muted-foreground mb-4">Bắt đầu bằng cách thêm ngày đầu tiên</p>
+          <MapPin className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-foreground mb-2">Chưa có điểm đến</h3>
+          <p className="text-muted-foreground mb-4">Bắt đầu bằng cách thêm điểm đến đầu tiên</p>
           <Button onClick={() => setShowAddDayModal(true)} className="bg-primary hover:bg-primary/90">
             <Plus className="h-4 w-4 mr-2" />
-            Thêm Ngày Đầu Tiên
+            Thêm Điểm Đến Đầu Tiên
           </Button>
         </div>
       )}
@@ -1413,9 +1443,9 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
       {/* <-- SỬA LỖI: Xóa prop 'isLoading' khỏi lời gọi để tránh crash --> */}
       {showAddDayModal && (
         <AddDayModal
+          tripId={tripId}
           onClose={() => setShowAddDayModal(false)}
           onSubmit={handleAddDay}
-        // isLoading={isAddingDay} // <-- Dòng này gây lỗi nên tạm thời xóa
         />
       )}
 
@@ -1431,6 +1461,8 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
       {editingDay && (
         <EditDayModal
           day={editingDay}
+          diem_den_id={editingDay.diem_den_id || editingDay.id}
+          tripId={tripId}
           onClose={() => setEditingDay(null)}
           onSubmit={handleEditDay}
         />

@@ -38,6 +38,9 @@ export function OverviewTab({ trip, onSwitchTab }: OverviewTabProps) {
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
     const [postCaption, setPostCaption] = useState("")
     const [postFiles, setPostFiles] = useState<File[]>([])
+    const [selectedDiemDenId, setSelectedDiemDenId] = useState<string>("")
+    const [diemDenList, setDiemDenList] = useState<any[]>([])
+    const [isLoadingDiemDen, setIsLoadingDiemDen] = useState(false)
     const [isPosting, setIsPosting] = useState(false)
     const [isLoadingPosts, setIsLoadingPosts] = useState(false)
     const [posts, setPosts] = useState<any[]>([])
@@ -102,6 +105,33 @@ export function OverviewTab({ trip, onSwitchTab }: OverviewTabProps) {
         }
     }
 
+    const fetchDiemDen = async () => {
+        try {
+            if (!tripId) return
+            const token = Cookies.get("token")
+            if (!token || token === "null" || token === "undefined") return
+            setIsLoadingDiemDen(true)
+            const res = await axios.get(
+                `https://travel-planner-imdw.onrender.com/api/chuyendi/${tripId}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        "Content-Type": "application/json",
+                    },
+                }
+            )
+            const data = res?.data
+            // Lấy danh sách điểm đến từ API response
+            const diemDen = Array.isArray(data?.diem_den) ? data.diem_den : []
+            setDiemDenList(diemDen)
+        } catch (error) {
+            console.error("Lỗi khi tải danh sách điểm đến:", error)
+            setDiemDenList([])
+        } finally {
+            setIsLoadingDiemDen(false)
+        }
+    }
+
     useEffect(() => {
         if (tripId) {
             fetchTripAvatar()
@@ -113,6 +143,7 @@ export function OverviewTab({ trip, onSwitchTab }: OverviewTabProps) {
         if (showMediaDialog) {
             fetchTripAvatar()
             fetchPosts()
+            fetchDiemDen()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [showMediaDialog])
@@ -366,6 +397,10 @@ export function OverviewTab({ trip, onSwitchTab }: OverviewTabProps) {
             const form = new FormData()
             form.append("chuyen_di_id", String(tripId))
             form.append("caption", postCaption || "")
+            // Thêm diem_den_id nếu được chọn
+            if (selectedDiemDenId && selectedDiemDenId !== "") {
+                form.append("diem_den_id", selectedDiemDenId)
+            }
             // Field name 'files' to match backend expecting req.files
             postFiles.forEach((file) => form.append("files", file))
             const res = await axios.post(
@@ -398,6 +433,9 @@ export function OverviewTab({ trip, onSwitchTab }: OverviewTabProps) {
                     avatar_nguoi_tao: data?.nguoi_tao?.avatar_url ?? "",
                     da_thich: 0,
                     ds_anh: Array.isArray(data?.ds_anh) ? data.ds_anh : [],
+                    // Thêm thông tin điểm đến từ response
+                    diem_den: data?.diem_den || null,
+                    ten_diem_den: data?.diem_den?.ten_diem_den || null,
                 }
                 setPosts((prev) => [newPost, ...prev])
             } else {
@@ -407,6 +445,7 @@ export function OverviewTab({ trip, onSwitchTab }: OverviewTabProps) {
             // reset post form
             setPostCaption("")
             setPostFiles([])
+            setSelectedDiemDenId("")
             setShowMediaDialog(false)
         } catch (error: any) {
             toast({
@@ -687,21 +726,21 @@ export function OverviewTab({ trip, onSwitchTab }: OverviewTabProps) {
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div 
+                        <div
                             className="p-4 border border-border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
                             onClick={() => onSwitchTab?.("itinerary")}
                         >
                             <Calendar className="h-6 w-6 text-primary mb-2" />
                             <p className="font-medium text-sm">Thêm ngày mới</p>
                         </div>
-                        <div 
+                        <div
                             className="p-4 border border-border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
                             onClick={() => onSwitchTab?.("members")}
                         >
                             <Users className="h-6 w-6 text-primary mb-2" />
                             <p className="font-medium text-sm">Mời thành viên</p>
                         </div>
-                        <div 
+                        <div
                             className="p-4 border border-border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
                             onClick={() => onSwitchTab?.("expenses")}
                         >
@@ -778,8 +817,45 @@ export function OverviewTab({ trip, onSwitchTab }: OverviewTabProps) {
                placeholder:text-BLACK-400/70 text-blue-900 font-medium 
                transition-all duration-200"
                             />
+                            <div className="space-y-3">
+                                <Label className="text-sm font-medium flex items-center gap-2">
+                                    <i className="fas fa-location-dot text-red-600 text-base"></i>
+                                    Điểm đến (tùy chọn)
+                                </Label>
 
-                                <Input
+                                <div className="relative">
+                                    <select
+                                        value={selectedDiemDenId}
+                                        onChange={(e) => setSelectedDiemDenId(e.target.value)}
+                                        disabled={isLoadingDiemDen}
+                                        className="w-full pl-4 pr-10 py-3 text-base rounded-lg border border-border 
+                 bg-background hover:border-blue-300 
+                 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1
+                 appearance-none transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <option value="">{isLoadingDiemDen ? "Đang tải..." : "Điểm đến dựa theo chuyến đi"}</option>
+                                        {diemDenList.map((diem) => (
+                                            <option key={diem.diem_den_id || diem.id} value={String(diem.diem_den_id || diem.id)}>
+                                                {diem.ten_diem_den || `Điểm đến ${diem.thu_tu || ""}`}
+                                                {diem.ngay_du_kien ? ` (Ngày ${diem.ngay_du_kien})` : ""}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {/* Mũi tên xuống đẹp hơn */}
+                                    <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </div>
+                                </div>
+                                {selectedDiemDenId && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Đã chọn: {diemDenList.find(d => String(d.diem_den_id || d.id) === selectedDiemDenId)?.ten_diem_den || ""}
+                                    </p>
+                                )}
+                            </div>
+
+                            <Input
                                 type="file"
                                 accept="image/*"
                                 multiple
@@ -824,11 +900,21 @@ export function OverviewTab({ trip, onSwitchTab }: OverviewTabProps) {
                                                 <AvatarFallback>{(p.ten_nguoi_tao || "U").slice(0, 1)}</AvatarFallback>
                                             </Avatar>
 
-                                            <div>
+                                            <div className="flex-1">
                                                 <p className="text-sm font-medium">{p.ten_nguoi_tao || "Người dùng"}</p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {new Date(p.tao_luc || Date.now()).toLocaleString("vi-VN")}
-                                                </p>
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {new Date(p.tao_luc || Date.now()).toLocaleString("vi-VN")}
+                                                    </p>
+                                                    {(p.diem_den?.ten_diem_den || p.ten_diem_den) && (
+                                                        <div className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                                                            <i className="fas fa-location-dot text-xs"></i>
+                                                            <span className="font-medium">
+                                                                {p.diem_den?.ten_diem_den || p.ten_diem_den}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
 
                                             <div className="flex justify-end gap-2 mb-2">
