@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import axios from "axios"
 import Cookies from "js-cookie"
@@ -9,14 +9,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Separator } from "@/components/ui/separator"
-import { Plus, MapPin, Calendar, DollarSign, Clock, ChevronDown, Loader2, Save, ChevronRight } from "lucide-react"
+import { Plus, MapPin, Calendar, DollarSign, Clock, ChevronDown, Loader2, Save, ChevronRight, GitCompare, FileDown } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import jsPDF from "jspdf"
+import html2canvas from "html2canvas"
 
 interface DiemDen {
   diem_den_id: number
@@ -130,6 +133,19 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showDiffModal, setShowDiffModal] = useState(false)
+  const [loadingDiff, setLoadingDiff] = useState(false)
+  const [diffData, setDiffData] = useState<any>(null)
+  const [hasInitialPlan, setHasInitialPlan] = useState(false)
+  const [showConfirmSaveDialog, setShowConfirmSaveDialog] = useState(false)
+  const [checkingInitialPlan, setCheckingInitialPlan] = useState(false)
+  const [initialPlanData, setInitialPlanData] = useState<any>(null)
+  const [showWarningDialog, setShowWarningDialog] = useState(false)
+  const [warningMessage, setWarningMessage] = useState("")
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null)
+  const [warningType, setWarningType] = useState<"diem_den" | "lich_trinh" | "chi_phi" | null>(null)
+  const [isExportingPDF, setIsExportingPDF] = useState(false)
+  const pdfContentRef = useRef<HTMLDivElement>(null)
   
   // Mock data mẫu (fallback)
   const mockDiemDen: DiemDen[] = [
@@ -629,6 +645,10 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
         description: response.data?.message || "Đã lưu kế hoạch gốc",
       })
 
+      // Đánh dấu đã lưu kế hoạch gốc
+      setHasInitialPlan(true)
+      setShowConfirmSaveDialog(false)
+
       // Refresh dữ liệu sau khi lưu
       await fetchKeHoachHienTai()
     } catch (err: any) {
@@ -643,12 +663,173 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
     }
   }
 
+  // Kiểm tra xem đã có kế hoạch gốc chưa
+  const checkInitialPlan = async () => {
+    setCheckingInitialPlan(true)
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        return
+      }
+
+      const response = await axios.get(
+        `${BACKEND_URL}/api/ke-hoach-chuyen-di/${tripId}/ke-hoach-goc`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      // Nếu có response và không phải 404, nghĩa là đã có kế hoạch gốc
+      if (response.data && response.data.initial_plan) {
+        setHasInitialPlan(true)
+        setInitialPlanData(response.data.initial_plan)
+      }
+    } catch (err: any) {
+      // 404 nghĩa là chưa có kế hoạch gốc
+      if (err.response?.status === 404) {
+        setHasInitialPlan(false)
+      } else {
+        console.error("Lỗi khi kiểm tra kế hoạch gốc:", err)
+      }
+    } finally {
+      setCheckingInitialPlan(false)
+    }
+  }
+
+  // Kiểm tra xem hoạt động có trong kế hoạch gốc không
+  const checkActivityInPlan = (activityType: "diem_den" | "lich_trinh" | "chi_phi", activityData: any): { inPlan: boolean; message: string } => {
+    if (!hasInitialPlan || !initialPlanData) {
+      return { inPlan: true, message: "" } // Không có kế hoạch gốc thì không cần cảnh báo
+    }
+
+    let isInPlan = false
+    let message = ""
+
+    switch (activityType) {
+      case "diem_den":
+        // Kiểm tra điểm đến: so sánh theo ten_diem_den và ngay_bat_dau
+        isInPlan = initialPlanData.diem_den?.some((dd: any) => 
+          dd.ten_diem_den === activityData.ten_diem_den &&
+          dd.ngay_bat_dau === activityData.ngay_bat_dau
+        ) || false
+        if (!isInPlan) {
+          message = `⚠️ Điểm đến "${activityData.ten_diem_den}" không có trong kế hoạch gốc. Bạn có chắc muốn thêm điểm đến mới này không?`
+        }
+        break
+
+      case "lich_trinh":
+        // Kiểm tra lịch trình: so sánh theo ngay và tieu_de
+        isInPlan = initialPlanData.lich_trinh?.some((lt: any) => 
+          lt.ngay === activityData.ngay &&
+          (lt.tieu_de === activityData.tieu_de || (!lt.tieu_de && !activityData.tieu_de))
+        ) || false
+        if (!isInPlan) {
+          message = `⚠️ Lịch trình "${activityData.tieu_de || activityData.ngay}" (${activityData.ngay}) không có trong kế hoạch gốc. Bạn có chắc muốn thêm lịch trình mới này không?`
+        }
+        break
+
+      case "chi_phi":
+        // Kiểm tra chi phí: so sánh theo ngay, so_tien và mo_ta
+        isInPlan = initialPlanData.chi_phi?.some((cp: any) => 
+          cp.ngay === activityData.ngay &&
+          Number(cp.so_tien) === Number(activityData.so_tien) &&
+          (cp.mo_ta === activityData.mo_ta || (!cp.mo_ta && !activityData.mo_ta))
+        ) || false
+        if (!isInPlan) {
+          message = `⚠️ Chi phí "${activityData.mo_ta || 'Không có mô tả'}" (${Number(activityData.so_tien || 0).toLocaleString('vi-VN')} VNĐ) không có trong kế hoạch gốc. Bạn có chắc muốn thêm chi phí mới này không?`
+        }
+        break
+    }
+
+    return { inPlan: isInPlan, message }
+  }
+
+  // Xử lý xác nhận cảnh báo
+  const handleConfirmWarning = () => {
+    if (pendingAction) {
+      pendingAction()
+      setPendingAction(null)
+    }
+    setShowWarningDialog(false)
+    setWarningMessage("")
+    setWarningType(null)
+  }
+
+  // Xử lý hủy cảnh báo
+  const handleCancelWarning = () => {
+    setPendingAction(null)
+    setShowWarningDialog(false)
+    setWarningMessage("")
+    setWarningType(null)
+  }
+
+  // Xử lý lưu kế hoạch với xác nhận
+  const handleSaveKeHoachGoc = () => {
+    if (hasInitialPlan) {
+      toast({
+        title: "Đã lưu kế hoạch gốc",
+        description: "Kế hoạch gốc chỉ được lưu một lần duy nhất",
+        variant: "destructive",
+      })
+      return
+    }
+    setShowConfirmSaveDialog(true)
+  }
+
+  // Fetch diff kế hoạch
+  const fetchDiffKeHoach = async () => {
+    setLoadingDiff(true)
+    setDiffData(null)
+    
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        router.replace("/login")
+        return
+      }
+
+      const response = await axios.get(
+        `${BACKEND_URL}/api/ke-hoach-chuyen-di/${tripId}/diff`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      setDiffData(response.data)
+      setShowDiffModal(true)
+    } catch (err: any) {
+      console.error("Lỗi khi lấy diff kế hoạch:", err)
+      if (err.response?.status === 404) {
+        toast({
+          title: "Chưa có kế hoạch gốc",
+          description: "Vui lòng lưu kế hoạch gốc trước khi so sánh",
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Lỗi",
+          description: err.response?.data?.message || "Không thể lấy thông tin so sánh",
+          variant: "destructive",
+        })
+      }
+    } finally {
+      setLoadingDiff(false)
+    }
+  }
+
   // Fetch dữ liệu khi component mount
   useEffect(() => {
     if (tripId) {
       fetchKeHoachHienTai()
       fetchTripInfo()
       fetchTripOwner() // Fetch thông tin chủ chuyến đi
+      checkInitialPlan() // Kiểm tra xem đã có kế hoạch gốc chưa
     }
   }, [tripId])
 
@@ -954,6 +1135,41 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
       }
     }
 
+    // Kiểm tra xem điểm đến có trong kế hoạch gốc không
+    const checkResult = checkActivityInPlan("diem_den", {
+      ten_diem_den: diemDenForm.ten_diem_den.trim(),
+      ngay_bat_dau: diemDenForm.ngay_bat_dau,
+    })
+
+    if (!checkResult.inPlan && checkResult.message) {
+      // Không có trong kế hoạch gốc, hiển thị cảnh báo
+      setWarningMessage(checkResult.message)
+      setWarningType("diem_den")
+      setPendingAction(() => {
+        return () => {
+          const newDiemDen: DiemDen = {
+            diem_den_id: diemDenIdCounter,
+            ten_diem_den: diemDenForm.ten_diem_den.trim(),
+            thu_tu: diemDenForm.thu_tu,
+            ngay_bat_dau: diemDenForm.ngay_bat_dau,
+            ngay_ket_thuc: diemDenForm.ngay_ket_thuc,
+            dia_diem_xuat_phat: diaDiemXuatPhat,
+            ghi_chu: diemDenForm.ghi_chu,
+          }
+          // Lưu ID của điểm đến vừa thêm để sử dụng sau
+          const newDiemDenId = diemDenIdCounter
+          setDiemDenList([...diemDenList, newDiemDen])
+          setDiemDenIdCounter(diemDenIdCounter + 1)
+          toast({
+            title: "Thành công",
+            description: "Đã thêm điểm đến",
+          })
+        }
+      })
+      setShowWarningDialog(true)
+      return false
+    }
+
     const newDiemDen: DiemDen = {
       diem_den_id: diemDenIdCounter,
       ten_diem_den: diemDenForm.ten_diem_den.trim(),
@@ -1206,6 +1422,35 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
       diemDenListIds: diemDenList.map(d => d.diem_den_id)
     })
 
+    // Kiểm tra xem lịch trình có trong kế hoạch gốc không
+    const checkResult = checkActivityInPlan("lich_trinh", {
+      ngay: lichTrinhForm.ngay,
+      tieu_de: lichTrinhForm.tieu_de.trim(),
+    })
+
+    if (!checkResult.inPlan && checkResult.message) {
+      // Không có trong kế hoạch gốc, hiển thị cảnh báo
+      setWarningMessage(checkResult.message)
+      setWarningType("lich_trinh")
+      setPendingAction(() => {
+        return () => {
+          // Đảm bảo diem_den_id là number
+          const newLichTrinhWithCorrectId: LichTrinh = {
+            ...newLichTrinh,
+            diem_den_id: Number(finalDiemDenId)
+          }
+          setLichTrinhList([...lichTrinhList, newLichTrinhWithCorrectId])
+          setLichTrinhIdCounter(lichTrinhIdCounter + 1)
+          toast({
+            title: "Thành công",
+            description: `Đã thêm lịch trình: ${newLichTrinh.tieu_de}${newLichTrinh.ngay ? ` (${newLichTrinh.ngay})` : ''}`,
+          })
+        }
+      })
+      setShowWarningDialog(true)
+      return false
+    }
+
     // Đảm bảo diem_den_id là number
     const newLichTrinhWithCorrectId: LichTrinh = {
       ...newLichTrinh,
@@ -1436,6 +1681,31 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
       ngay: chiPhiForm.ngay || new Date().toISOString().split("T")[0],
     }
 
+    // Kiểm tra xem chi phí có trong kế hoạch gốc không
+    const checkResult = checkActivityInPlan("chi_phi", {
+      ngay: chiPhiForm.ngay,
+      so_tien: chiPhiForm.so_tien,
+      mo_ta: chiPhiForm.mo_ta.trim(),
+    })
+
+    if (!checkResult.inPlan && checkResult.message) {
+      // Không có trong kế hoạch gốc, hiển thị cảnh báo
+      setWarningMessage(checkResult.message)
+      setWarningType("chi_phi")
+      setPendingAction(() => {
+        return () => {
+          setChiPhiList([...chiPhiList, newChiPhi])
+          setChiPhiIdCounter(chiPhiIdCounter + 1)
+          toast({
+            title: "Thành công",
+            description: `Đã thêm chi phí: ${newChiPhi.mo_ta} - ${newChiPhi.so_tien.toLocaleString('vi-VN')} VNĐ`,
+          })
+        }
+      })
+      setShowWarningDialog(true)
+      return false
+    }
+
     setChiPhiList([...chiPhiList, newChiPhi])
     setChiPhiIdCounter(chiPhiIdCounter + 1)
     
@@ -1502,6 +1772,130 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
     return chiPhiList.filter(cp => cp.lich_trinh_id === lichTrinhId)
   }
 
+  // Xuất PDF
+  const handleExportPDF = async () => {
+    if (!pdfContentRef.current) {
+      toast({
+        title: "Lỗi",
+        description: "Không tìm thấy nội dung để xuất PDF",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsExportingPDF(true)
+    try {
+      // Kiểm tra dữ liệu
+      if (diemDenList.length === 0) {
+        toast({
+          title: "Cảnh báo",
+          description: "Chưa có dữ liệu để xuất PDF",
+          variant: "destructive",
+        })
+        setIsExportingPDF(false)
+        return
+      }
+
+      // Tạm thời hiển thị phần PDF content để html2canvas có thể chụp
+      const pdfElement = pdfContentRef.current
+      if (!pdfElement) {
+        toast({
+          title: "Lỗi",
+          description: "Không tìm thấy nội dung để xuất PDF",
+          variant: "destructive",
+        })
+        setIsExportingPDF(false)
+        return
+      }
+
+      const originalStyles = {
+        position: pdfElement.style.position || '',
+        left: pdfElement.style.left || '',
+        top: pdfElement.style.top || '',
+        visibility: pdfElement.style.visibility || '',
+        opacity: pdfElement.style.opacity || '',
+        zIndex: pdfElement.style.zIndex || '',
+        width: pdfElement.style.width || '',
+      }
+
+      // Hiển thị tạm thời ở vị trí có thể chụp được
+      pdfElement.style.position = 'fixed'
+      pdfElement.style.left = '0'
+      pdfElement.style.top = '0'
+      pdfElement.style.visibility = 'visible'
+      pdfElement.style.opacity = '1'
+      pdfElement.style.zIndex = '99999'
+      pdfElement.style.width = '210mm'
+      pdfElement.style.backgroundColor = '#ffffff'
+
+      // Đợi để render xong
+      await new Promise(resolve => setTimeout(resolve, 300))
+
+      // Tạo canvas từ HTML content (đã dùng inline styles nên không cần override CSS)
+      const canvas = await html2canvas(pdfElement, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+        width: pdfElement.scrollWidth,
+        height: pdfElement.scrollHeight,
+      })
+
+      // Khôi phục style ban đầu
+      pdfElement.style.position = originalStyles.position || 'absolute'
+      pdfElement.style.left = originalStyles.left || '-9999px'
+      pdfElement.style.top = originalStyles.top || '0'
+      pdfElement.style.visibility = originalStyles.visibility || 'hidden'
+      pdfElement.style.opacity = originalStyles.opacity || ''
+      pdfElement.style.zIndex = originalStyles.zIndex || '-1'
+      pdfElement.style.width = originalStyles.width || '210mm'
+
+      const imgData = canvas.toDataURL("image/png")
+      
+      // Tính toán kích thước PDF
+      const imgWidth = 210 // A4 width in mm
+      const pageHeight = 297 // A4 height in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width
+      let heightLeft = imgHeight
+
+      // Tạo PDF
+      const pdf = new jsPDF("p", "mm", "a4")
+      let position = 0
+
+      // Thêm trang đầu tiên
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight)
+      heightLeft -= pageHeight
+
+      // Thêm các trang tiếp theo nếu cần
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight
+        pdf.addPage()
+        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight)
+        heightLeft -= pageHeight
+      }
+
+      // Lấy tên chuyến đi từ tripInfo hoặc tripId
+      const fileName = `ke-hoach-chuyen-di-${tripId}-${new Date().toISOString().split("T")[0]}.pdf`
+      
+      // Tải xuống PDF
+      pdf.save(fileName)
+
+      toast({
+        title: "Thành công",
+        description: "Đã xuất PDF kế hoạch chuyến đi",
+      })
+    } catch (error) {
+      console.error("Lỗi khi xuất PDF:", error)
+      toast({
+        title: "Lỗi",
+        description: "Không thể xuất PDF. Vui lòng thử lại.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsExportingPDF(false)
+    }
+  }
+
   // Sort điểm đến theo thứ tự
   const sortedDiemDenList = [...diemDenList].sort((a, b) => a.thu_tu - b.thu_tu)
 
@@ -1522,21 +1916,57 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
         <div className="flex gap-2">
           <Button 
             variant="outline" 
-            onClick={saveKeHoachGoc}
-            disabled={saving}
+            onClick={handleExportPDF}
+            disabled={isExportingPDF || sortedDiemDenList.length === 0}
           >
-            {saving ? (
+            {isExportingPDF ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Đang lưu...
+                Đang xuất...
               </>
             ) : (
               <>
-                <Save className="h-4 w-4 mr-2" />
-                Lưu kế hoạch gốc
+                <FileDown className="h-4 w-4 mr-2" />
+                In PDF
               </>
             )}
           </Button>
+          <Button 
+            variant="outline" 
+            onClick={fetchDiffKeHoach}
+            disabled={loadingDiff}
+          >
+            {loadingDiff ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Đang tải...
+              </>
+            ) : (
+              <>
+                <GitCompare className="h-4 w-4 mr-2" />
+                So sánh kế hoạch
+              </>
+            )}
+          </Button>
+          {!hasInitialPlan && (
+            <Button 
+              variant="outline" 
+              onClick={handleSaveKeHoachGoc}
+              disabled={saving || checkingInitialPlan}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Đang lưu...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Lưu kế hoạch gốc
+                </>
+              )}
+            </Button>
+          )}
         <Button onClick={() => setShowAddPlanModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Thêm kế hoạch
@@ -1552,7 +1982,187 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
         </Card>
       )}
 
-      {/* Hiển thị điểm đến với lịch trình và chi phí */}
+      {/* Nội dung để xuất PDF (ẩn các nút, chỉ hiển thị dữ liệu) */}
+      <div 
+        ref={pdfContentRef} 
+        style={{ 
+          position: 'absolute',
+          left: '-9999px',
+          top: '0',
+          width: '210mm',
+          backgroundColor: '#ffffff',
+          visibility: 'hidden',
+          zIndex: -1,
+          color: '#000000',
+          fontFamily: 'Arial, sans-serif'
+        }}
+      >
+        <div style={{ padding: '32px', width: '210mm', minHeight: '297mm', backgroundColor: '#ffffff' }}>
+          {/* Header PDF */}
+          <div style={{ textAlign: 'center', marginBottom: '32px', borderBottom: '2px solid #d1d5db', paddingBottom: '16px' }}>
+            <h1 style={{ fontSize: '30px', fontWeight: 'bold', color: '#1f2937', marginBottom: '8px' }}>Kế hoạch chuyến đi</h1>
+            {tripInfo && (
+              <div style={{ fontSize: '14px', color: '#4b5563' }}>
+                {tripInfo.dia_diem_xuat_phat && (
+                  <p style={{ margin: '4px 0' }}>Điểm xuất phát: {tripInfo.dia_diem_xuat_phat}</p>
+                )}
+                {tripInfo.ngay_bat_dau && tripInfo.ngay_ket_thuc && (
+                  <p style={{ margin: '4px 0' }}>
+                    Thời gian: {new Date(tripInfo.ngay_bat_dau).toLocaleDateString("vi-VN")} - {new Date(tripInfo.ngay_ket_thuc).toLocaleDateString("vi-VN")}
+                  </p>
+                )}
+                <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '8px' }}>
+                  Xuất ngày: {new Date().toLocaleDateString("vi-VN")} {new Date().toLocaleTimeString("vi-VN")}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Nội dung kế hoạch */}
+          {diemDenList.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '32px 0', color: '#6b7280' }}>
+              <p>Chưa có điểm đến nào trong kế hoạch.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {[...diemDenList].sort((a, b) => a.thu_tu - b.thu_tu).map((diemDen, index) => {
+                const lichTrinhOfDiemDen = getLichTrinhByDiemDen(diemDen.diem_den_id)
+                const chiPhiOfDiemDen = getChiPhiByDiemDen(diemDen.diem_den_id)
+                const totalChiPhi = chiPhiOfDiemDen.reduce((sum, cp) => sum + cp.so_tien, 0)
+
+                return (
+                  <div key={diemDen.diem_den_id} style={{ border: '1px solid #d1d5db', borderRadius: '8px', padding: '24px', marginBottom: '24px', pageBreakInside: 'avoid' }}>
+                    {/* Header điểm đến */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid #e5e7eb' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#dbeafe', color: '#1d4ed8', fontWeight: 'bold', fontSize: '18px', flexShrink: 0 }}>
+                        {diemDen.thu_tu}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <h3 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1f2937', marginBottom: '8px' }}>{diemDen.ten_diem_den}</h3>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '14px', color: '#4b5563' }}>
+                          {diemDen.ngay_bat_dau && diemDen.ngay_ket_thuc && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span>📅</span>
+                              <span>
+                                {new Date(diemDen.ngay_bat_dau).toLocaleDateString("vi-VN")} - {new Date(diemDen.ngay_ket_thuc).toLocaleDateString("vi-VN")}
+                              </span>
+                            </div>
+                          )}
+                          {diemDen.dia_diem_xuat_phat && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span>📍</span>
+                              <span>{diemDen.dia_diem_xuat_phat}</span>
+                            </div>
+                          )}
+                        </div>
+                        {diemDen.ghi_chu && (
+                          <p style={{ fontSize: '14px', color: '#4b5563', marginTop: '8px', fontStyle: 'italic' }}>📝 {diemDen.ghi_chu}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Lịch trình */}
+                    {lichTrinhOfDiemDen.length > 0 && (
+                      <div style={{ marginBottom: '24px' }}>
+                        <h4 style={{ fontSize: '18px', fontWeight: '600', color: '#1f2937', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span>📅</span>
+                          Lịch trình ({lichTrinhOfDiemDen.length} hoạt động)
+                        </h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginLeft: '24px' }}>
+                          {lichTrinhOfDiemDen.map((lichTrinh) => {
+                            const chiPhiOfLichTrinh = lichTrinh.lich_trinh_id 
+                              ? getChiPhiByLichTrinh(lichTrinh.lich_trinh_id)
+                              : getChiPhiByNgay(diemDen.diem_den_id, lichTrinh.ngay)
+                            const totalChiPhiNgay = chiPhiOfLichTrinh.reduce((sum, cp) => sum + cp.so_tien, 0)
+
+                            return (
+                              <div key={lichTrinh.lich_trinh_id} style={{ borderLeft: '4px solid #3b82f6', paddingLeft: '16px', paddingTop: '8px', paddingBottom: '8px', backgroundColor: '#f9fafb', borderRadius: '0 4px 4px 0' }}>
+                                <h5 style={{ fontWeight: '600', color: '#1f2937', marginBottom: '4px' }}>{lichTrinh.tieu_de}</h5>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '14px', color: '#4b5563', marginBottom: '8px' }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <span>📅</span>
+                                    {new Date(lichTrinh.ngay).toLocaleDateString("vi-VN")}
+                                  </span>
+                                  {lichTrinh.gio_bat_dau && lichTrinh.gio_ket_thuc && (
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <span>⏰</span>
+                                      {lichTrinh.gio_bat_dau} - {lichTrinh.gio_ket_thuc}
+                                    </span>
+                                  )}
+                                </div>
+                                {lichTrinh.ghi_chu && (
+                                  <p style={{ fontSize: '14px', color: '#4b5563', marginBottom: '8px' }}>{lichTrinh.ghi_chu}</p>
+                                )}
+                                {chiPhiOfLichTrinh.length > 0 && (
+                                  <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
+                                    <p style={{ fontSize: '12px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Chi phí trong ngày:</p>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginLeft: '12px' }}>
+                                      {chiPhiOfLichTrinh.map((chiPhi) => (
+                                        <div key={chiPhi.chi_phi_id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                                          <span style={{ color: '#4b5563' }}>
+                                            • {chiPhi.mo_ta} {chiPhi.nhom && `(${chiPhi.nhom})`}
+                                          </span>
+                                          <span style={{ fontWeight: '600', color: '#1f2937' }}>
+                                            {chiPhi.so_tien.toLocaleString("vi-VN")} VNĐ
+                                          </span>
+                                        </div>
+                                      ))}
+                                      {totalChiPhiNgay > 0 && (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '600', color: '#1f2937', marginTop: '4px', paddingTop: '4px', borderTop: '1px solid #e5e7eb' }}>
+                                          <span>Tổng:</span>
+                                          <span>{totalChiPhiNgay.toLocaleString("vi-VN")} VNĐ</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Chi phí tổng hợp */}
+                    {totalChiPhi > 0 && (
+                      <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '2px solid #d1d5db' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#eff6ff', padding: '12px', borderRadius: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>💰</span>
+                            <span style={{ fontWeight: '600', color: '#1f2937' }}>Tổng chi phí điểm đến:</span>
+                          </div>
+                          <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#1d4ed8' }}>
+                            {totalChiPhi.toLocaleString("vi-VN")} VNĐ
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+
+              {/* Tổng kết */}
+              {chiPhiList.length > 0 && (
+                <div style={{ marginTop: '32px', paddingTop: '24px', borderTop: '2px solid #9ca3af' }}>
+                  <div style={{ background: 'linear-gradient(to right, #dbeafe, #eff6ff)', padding: '24px', borderRadius: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '24px' }}>💰</span>
+                        <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#1f2937' }}>Tổng chi phí toàn bộ chuyến đi:</span>
+                      </div>
+                      <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#1d4ed8' }}>
+                        {chiPhiList.reduce((sum, cp) => sum + cp.so_tien, 0).toLocaleString("vi-VN")} VNĐ
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Hiển thị điểm đến với lịch trình và chi phí (UI thông thường) */}
       {sortedDiemDenList.length === 0 ? (
         <Card>
           <CardContent className="p-8">
@@ -2289,6 +2899,369 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
           </Tabs>
         </DialogContent>
       </Dialog>
+
+      {/* Modal So sánh kế hoạch */}
+      <Dialog open={showDiffModal} onOpenChange={setShowDiffModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <GitCompare className="h-5 w-5" />
+              So sánh kế hoạch
+            </DialogTitle>
+          </DialogHeader>
+          
+          {diffData ? (
+            <div className="space-y-4">
+              {/* Thông tin thời gian */}
+              {diffData.thoi_gian && (
+                <div className="bg-muted/50 p-3 rounded-md text-sm">
+                  <p><strong>Kế hoạch gốc lưu lúc:</strong> {new Date(diffData.thoi_gian.ke_hoach_goc_luu_luc).toLocaleString("vi-VN")}</p>
+                  <p><strong>Kế hoạch hiện tại lấy lúc:</strong> {new Date(diffData.thoi_gian.ke_hoach_hien_tai_lay_luc).toLocaleString("vi-VN")}</p>
+                </div>
+              )}
+
+              {/* Tóm tắt */}
+              {diffData.tom_tat && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Tóm tắt thay đổi</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-primary">{diffData.tom_tat.tong_so_thay_doi || 0}</p>
+                        <p className="text-xs text-muted-foreground">Tổng thay đổi</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-green-600">{diffData.tom_tat.so_the_moi || 0}</p>
+                        <p className="text-xs text-muted-foreground">Đã thêm</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-red-600">{diffData.tom_tat.so_da_xoa || 0}</p>
+                        <p className="text-xs text-muted-foreground">Đã xóa</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-yellow-600">{diffData.tom_tat.so_da_sua || 0}</p>
+                        <p className="text-xs text-muted-foreground">Đã sửa</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-blue-600">{diffData.tom_tat.so_doi_thu_tu || 0}</p>
+                        <p className="text-xs text-muted-foreground">Đổi thứ tự</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Message người dùng */}
+              {diffData.message_nguoi_dung && (
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="whitespace-pre-line">{diffData.message_nguoi_dung}</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Chi tiết thay đổi */}
+              {diffData.thay_doi && (
+                <div className="space-y-4">
+                  {/* Đã thêm */}
+                  {diffData.thay_doi.da_them && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg text-green-600">➕ Đã thêm mới</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {diffData.thay_doi.da_them.diem_den && diffData.thay_doi.da_them.diem_den.length > 0 && (
+                          <div>
+                            <p className="font-semibold mb-2">Điểm đến:</p>
+                            <ul className="list-disc list-inside space-y-1 text-sm">
+                              {diffData.thay_doi.da_them.diem_den.map((dd: any, idx: number) => (
+                                <li key={idx}>{dd.ten} (Thứ tự: {dd.thu_tu})</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {diffData.thay_doi.da_them.lich_trinh && diffData.thay_doi.da_them.lich_trinh.length > 0 && (
+                          <div>
+                            <p className="font-semibold mb-2">Lịch trình:</p>
+                            <ul className="list-disc list-inside space-y-1 text-sm">
+                              {diffData.thay_doi.da_them.lich_trinh.map((lt: any, idx: number) => (
+                                <li key={idx}>{lt.ngay} - {lt.tieu_de} {lt.gio && `(${lt.gio})`}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {diffData.thay_doi.da_them.dia_diem && diffData.thay_doi.da_them.dia_diem.length > 0 && (
+                          <div>
+                            <p className="font-semibold mb-2">Địa điểm:</p>
+                            <ul className="list-disc list-inside space-y-1 text-sm">
+                              {diffData.thay_doi.da_them.dia_diem.map((dd: any, idx: number) => (
+                                <li key={idx}>{dd.ten} ({dd.loai}) {dd.thoi_gian && `- ${dd.thoi_gian}`}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {diffData.thay_doi.da_them.chi_phi && diffData.thay_doi.da_them.chi_phi.length > 0 && (
+                          <div>
+                            <p className="font-semibold mb-2">Chi phí:</p>
+                            <ul className="list-disc list-inside space-y-1 text-sm">
+                              {diffData.thay_doi.da_them.chi_phi.map((cp: any, idx: number) => (
+                                <li key={idx}>{cp.mo_ta} - {Number(cp.so_tien).toLocaleString("vi-VN")} VNĐ ({cp.nhom}) - {cp.ngay}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Đã xóa */}
+                  {diffData.thay_doi.da_xoa && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg text-red-600">➖ Đã xóa</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {diffData.thay_doi.da_xoa.diem_den && diffData.thay_doi.da_xoa.diem_den.length > 0 && (
+                          <div>
+                            <p className="font-semibold mb-2">Điểm đến:</p>
+                            <ul className="list-disc list-inside space-y-1 text-sm">
+                              {diffData.thay_doi.da_xoa.diem_den.map((dd: any, idx: number) => (
+                                <li key={idx}>{dd.ten} (Thứ tự: {dd.thu_tu})</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {diffData.thay_doi.da_xoa.lich_trinh && diffData.thay_doi.da_xoa.lich_trinh.length > 0 && (
+                          <div>
+                            <p className="font-semibold mb-2">Lịch trình:</p>
+                            <ul className="list-disc list-inside space-y-1 text-sm">
+                              {diffData.thay_doi.da_xoa.lich_trinh.map((lt: any, idx: number) => (
+                                <li key={idx}>{lt.ngay} - {lt.tieu_de}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {diffData.thay_doi.da_xoa.dia_diem && diffData.thay_doi.da_xoa.dia_diem.length > 0 && (
+                          <div>
+                            <p className="font-semibold mb-2">Địa điểm:</p>
+                            <ul className="list-disc list-inside space-y-1 text-sm">
+                              {diffData.thay_doi.da_xoa.dia_diem.map((dd: any, idx: number) => (
+                                <li key={idx}>{dd.ten} ({dd.loai})</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {diffData.thay_doi.da_xoa.chi_phi && diffData.thay_doi.da_xoa.chi_phi.length > 0 && (
+                          <div>
+                            <p className="font-semibold mb-2">Chi phí:</p>
+                            <ul className="list-disc list-inside space-y-1 text-sm">
+                              {diffData.thay_doi.da_xoa.chi_phi.map((cp: any, idx: number) => (
+                                <li key={idx}>{cp.mo_ta} - {Number(cp.so_tien).toLocaleString("vi-VN")} VNĐ - {cp.ngay}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Đã sửa */}
+                  {diffData.thay_doi.da_sua && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg text-yellow-600">✏️ Đã sửa</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {diffData.thay_doi.da_sua.diem_den && diffData.thay_doi.da_sua.diem_den.length > 0 && (
+                          <div>
+                            <p className="font-semibold mb-2">Điểm đến:</p>
+                            {diffData.thay_doi.da_sua.diem_den.map((dd: any, idx: number) => (
+                              <div key={idx} className="mb-3 p-2 bg-muted/50 rounded text-sm">
+                                <p className="font-medium">{dd.ten}</p>
+                                <p className="text-xs text-muted-foreground mb-1">Các trường thay đổi: {dd.cac_truong_thay_doi?.join(", ")}</p>
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  <div>
+                                    <p className="font-semibold">Giá trị cũ:</p>
+                                    <pre className="whitespace-pre-wrap">{JSON.stringify(dd.gia_tri_cu, null, 2)}</pre>
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold">Giá trị mới:</p>
+                                    <pre className="whitespace-pre-wrap">{JSON.stringify(dd.gia_tri_moi, null, 2)}</pre>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {diffData.thay_doi.da_sua.lich_trinh && diffData.thay_doi.da_sua.lich_trinh.length > 0 && (
+                          <div>
+                            <p className="font-semibold mb-2">Lịch trình:</p>
+                            {diffData.thay_doi.da_sua.lich_trinh.map((lt: any, idx: number) => (
+                              <div key={idx} className="mb-3 p-2 bg-muted/50 rounded text-sm">
+                                <p className="font-medium">{lt.ngay} - {lt.tieu_de || "Không có tiêu đề"}</p>
+                                <p className="text-xs text-muted-foreground mb-1">Các trường thay đổi: {lt.cac_truong_thay_doi?.join(", ")}</p>
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  <div>
+                                    <p className="font-semibold">Giá trị cũ:</p>
+                                    <pre className="whitespace-pre-wrap">{JSON.stringify(lt.gia_tri_cu, null, 2)}</pre>
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold">Giá trị mới:</p>
+                                    <pre className="whitespace-pre-wrap">{JSON.stringify(lt.gia_tri_moi, null, 2)}</pre>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {diffData.thay_doi.da_sua.dia_diem && diffData.thay_doi.da_sua.dia_diem.length > 0 && (
+                          <div>
+                            <p className="font-semibold mb-2">Địa điểm:</p>
+                            {diffData.thay_doi.da_sua.dia_diem.map((dd: any, idx: number) => (
+                              <div key={idx} className="mb-3 p-2 bg-muted/50 rounded text-sm">
+                                <p className="font-medium">{dd.ten}</p>
+                                <p className="text-xs text-muted-foreground mb-1">Các trường thay đổi: {dd.cac_truong_thay_doi?.join(", ")}</p>
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  <div>
+                                    <p className="font-semibold">Giá trị cũ:</p>
+                                    <pre className="whitespace-pre-wrap">{JSON.stringify(dd.gia_tri_cu, null, 2)}</pre>
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold">Giá trị mới:</p>
+                                    <pre className="whitespace-pre-wrap">{JSON.stringify(dd.gia_tri_moi, null, 2)}</pre>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {diffData.thay_doi.da_sua.chi_phi && diffData.thay_doi.da_sua.chi_phi.length > 0 && (
+                          <div>
+                            <p className="font-semibold mb-2">Chi phí:</p>
+                            {diffData.thay_doi.da_sua.chi_phi.map((cp: any, idx: number) => (
+                              <div key={idx} className="mb-3 p-2 bg-muted/50 rounded text-sm">
+                                <p className="font-medium">{cp.mo_ta || "Chi phí"}</p>
+                                <p className="text-xs text-muted-foreground mb-1">Các trường thay đổi: {cp.cac_truong_thay_doi?.join(", ")}</p>
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  <div>
+                                    <p className="font-semibold">Giá trị cũ:</p>
+                                    <pre className="whitespace-pre-wrap">{JSON.stringify(cp.gia_tri_cu, null, 2)}</pre>
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold">Giá trị mới:</p>
+                                    <pre className="whitespace-pre-wrap">{JSON.stringify(cp.gia_tri_moi, null, 2)}</pre>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Đã đổi thứ tự */}
+                  {diffData.thay_doi.da_doi_thu_tu && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg text-blue-600">🔄 Đã đổi thứ tự</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {diffData.thay_doi.da_doi_thu_tu.diem_den && diffData.thay_doi.da_doi_thu_tu.diem_den.length > 0 && (
+                          <div>
+                            <p className="font-semibold mb-2">Điểm đến:</p>
+                            <ul className="list-disc list-inside space-y-1 text-sm">
+                              {diffData.thay_doi.da_doi_thu_tu.diem_den.map((dd: any, idx: number) => (
+                                <li key={idx}>{dd.ten}: Thứ tự {dd.thu_tu_cu} → {dd.thu_tu_moi}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              )}
+
+              {/* Không có thay đổi */}
+              {diffData.thong_bao && (
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-center text-muted-foreground">{diffData.thong_bao}</p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDiffModal(false)}>
+              Đóng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog xác nhận lưu kế hoạch gốc */}
+      <AlertDialog open={showConfirmSaveDialog} onOpenChange={setShowConfirmSaveDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xác nhận lưu kế hoạch gốc</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p className="font-semibold text-destructive">
+                ⚠️ Cảnh báo: Kế hoạch gốc chỉ được lưu một lần duy nhất!
+              </p>
+              <p>
+                Sau khi lưu, bạn sẽ không thể lưu lại kế hoạch gốc. Hệ thống sẽ sử dụng kế hoạch này làm cơ sở để so sánh với các thay đổi sau này.
+              </p>
+              <p>
+                Bạn có chắc chắn muốn lưu kế hoạch gốc không?
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={saveKeHoachGoc}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Xác nhận lưu
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog cảnh báo khi thêm hoạt động không có trong kế hoạch gốc */}
+      <AlertDialog open={showWarningDialog} onOpenChange={setShowWarningDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cảnh báo</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p className="font-semibold text-yellow-600">
+                {warningMessage}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Hoạt động này sẽ được thêm vào kế hoạch hiện tại nhưng không có trong kế hoạch gốc. Bạn có muốn tiếp tục không?
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCancelWarning}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmWarning}
+              className="bg-yellow-600 text-white hover:bg-yellow-700"
+            >
+              Xác nhận thêm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

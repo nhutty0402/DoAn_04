@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Bell, Settings, LogOut, Plane, Globe, Home, Users, User, Upload, ImageIcon, Eye, EyeOff } from "lucide-react"
+import { Bell, Settings, LogOut, Plane, Globe, Home, Users, User, Upload, ImageIcon, Eye, EyeOff, BarChart3 } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -526,6 +526,16 @@ export function DashboardHeader() {
                 >
                   <Globe className="h-4 w-4" />
                   Bản Tin
+                </Button>
+              </Link>
+              <Link href="/statistics">
+                <Button
+                  variant={pathname.startsWith("/statistics") ? "default" : "ghost"}
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  Thống kê
                 </Button>
               </Link>
             </nav>

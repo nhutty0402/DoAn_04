@@ -24,17 +24,22 @@ interface EditPoiModalProps {
 }
 
 export function EditPoiModal({ poi, dayId, tripId, onClose, onSubmit }: EditPoiModalProps) {
+  // Helper để lấy giá trị từ POI (hỗ trợ cả camelCase và snake_case)
+  const getPoiValue = (camelKey: string, snakeKey: string, defaultValue: any = "") => {
+    return poi?.[camelKey] || poi?.[snakeKey] || defaultValue
+  }
+
   const [formData, setFormData] = useState({
-    tenDiaDiem: poi?.tenDiaDiem || "",
-    loaiDiaDiem: poi?.loaiDiaDiem || "POI",
-    gioBatDau: poi?.gioBatDau || "",
-    gioKetThuc: poi?.gioKetThuc || "",
-    ghiChu: poi?.ghiChu || "",
-    googlePlaceId: "", // Sẽ được điền từ POI data nếu có
-    viDo: poi?.toaDo?.lat?.toString() || "",
-    kinhDo: poi?.toaDo?.lng?.toString() || "",
+    tenDiaDiem: getPoiValue("tenDiaDiem", "ten_dia_diem"),
+    loaiDiaDiem: getPoiValue("loaiDiaDiem", "loai_dia_diem", "POI"),
+    gioBatDau: getPoiValue("gioBatDau", "thoi_gian_bat_dau"),
+    gioKetThuc: getPoiValue("gioKetThuc", "thoi_gian_ket_thuc"),
+    ghiChu: getPoiValue("ghiChu", "ghi_chu"),
+    googlePlaceId: getPoiValue("googlePlaceId", "google_place_id"),
+    viDo: (poi?.toaDo?.lat?.toString() || poi?.vi_do?.toString() || ""),
+    kinhDo: (poi?.toaDo?.lng?.toString() || poi?.kinh_do?.toString() || ""),
   })
-  const [mapboxSearch, setMapboxSearch] = useState(poi?.tenDiaDiem || "")
+  const [mapboxSearch, setMapboxSearch] = useState(getPoiValue("tenDiaDiem", "ten_dia_diem"))
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
@@ -58,8 +63,11 @@ export function EditPoiModal({ poi, dayId, tripId, onClose, onSubmit }: EditPoiM
   useEffect(() => {
     // Cập nhật formData khi poi thay đổi
     console.log("EditPoiModal useEffect - POI nhận được:", poi)
-    console.log("EditPoiModal - poi.gioBatDau:", poi?.gioBatDau)
-    console.log("EditPoiModal - poi.gioKetThuc:", poi?.gioKetThuc)
+    
+    // Helper để lấy giá trị từ POI (hỗ trợ cả camelCase và snake_case)
+    const getPoiValue = (camelKey: string, snakeKey: string, defaultValue: any = "") => {
+      return poi?.[camelKey] || poi?.[snakeKey] || defaultValue
+    }
     
     // Đảm bảo format giờ đúng (HH:mm) cho input type="time"
     const formatTimeForInput = (timeValue: string | undefined | null): string => {
@@ -82,17 +90,27 @@ export function EditPoiModal({ poi, dayId, tripId, onClose, onSubmit }: EditPoiM
       return timeValue
     }
 
+    // Lấy giá trị từ POI (hỗ trợ cả camelCase và snake_case từ backend)
+    const tenDiaDiem = getPoiValue("tenDiaDiem", "ten_dia_diem")
+    const loaiDiaDiem = getPoiValue("loaiDiaDiem", "loai_dia_diem", "POI")
+    const gioBatDau = formatTimeForInput(getPoiValue("gioBatDau", "thoi_gian_bat_dau"))
+    const gioKetThuc = formatTimeForInput(getPoiValue("gioKetThuc", "thoi_gian_ket_thuc"))
+    const ghiChu = getPoiValue("ghiChu", "ghi_chu")
+    const googlePlaceId = getPoiValue("googlePlaceId", "google_place_id")
+    const viDo = (poi?.toaDo?.lat?.toString() || poi?.vi_do?.toString() || "")
+    const kinhDo = (poi?.toaDo?.lng?.toString() || poi?.kinh_do?.toString() || "")
+
     setFormData({
-      tenDiaDiem: poi?.tenDiaDiem || "",
-      loaiDiaDiem: poi?.loaiDiaDiem || "POI",
-      gioBatDau: formatTimeForInput(poi?.gioBatDau),
-      gioKetThuc: formatTimeForInput(poi?.gioKetThuc),
-      ghiChu: poi?.ghiChu || "",
-      googlePlaceId: "",
-      viDo: poi?.toaDo?.lat?.toString() || "",
-      kinhDo: poi?.toaDo?.lng?.toString() || "",
+      tenDiaDiem,
+      loaiDiaDiem,
+      gioBatDau,
+      gioKetThuc,
+      ghiChu,
+      googlePlaceId,
+      viDo,
+      kinhDo,
     })
-    setMapboxSearch(poi?.tenDiaDiem || "")
+    setMapboxSearch(tenDiaDiem)
   }, [poi])
 
   const poiTypes = [
