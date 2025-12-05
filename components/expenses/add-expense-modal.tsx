@@ -10,12 +10,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
-import { X, DollarSign, Receipt, Percent } from "lucide-react"
+import { X, DollarSign, Receipt, Percent, Check, ChevronsUpDown } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { motion } from "framer-motion"
 import axios from "axios"
 import Cookies from "js-cookie"
 import { useRouter } from "next/navigation"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { cn } from "@/lib/utils"
 
 interface AddExpenseModalProps {
   onClose: () => void
@@ -57,6 +60,16 @@ export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpen
   const { toast } = useToast()
   const router = useRouter()
 
+  // State cho điểm đến và ngày
+  const [diemDenList, setDiemDenList] = useState<Array<{ diem_den_id: number; ten_diem_den: string }>>([])
+  const [isLoadingDiemDen, setIsLoadingDiemDen] = useState(false)
+  const [openCombobox, setOpenCombobox] = useState(false)
+  const [selectedDiemDenId, setSelectedDiemDenId] = useState<string>("")
+  const [danhSachNgay, setDanhSachNgay] = useState<string[]>([])
+  const [isLoadingNgay, setIsLoadingNgay] = useState(false)
+  const [selectedNgay, setSelectedNgay] = useState<string>("")
+  const [openNgayCombobox, setOpenNgayCombobox] = useState(false)
+
   // ✅ Kiểm tra xem đây có phải lần đầu tiên thêm chi phí không
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -74,6 +87,164 @@ export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpen
       }
     }
   }, [members, formData.nguoiTraId])
+
+  // Fetch danh sách điểm đến khi component mount
+  useEffect(() => {
+    const fetchDiemDenList = async () => {
+      setIsLoadingDiemDen(true)
+
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("Không có token để fetch điểm đến")
+        setIsLoadingDiemDen(false)
+        return
+      }
+
+      try {
+        const response = await axios.get(
+          `https://travel-planner-imdw.onrender.com/api/chuyen-di/${tripId}/diem-den/ten`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        )
+
+        console.log("✅ API Response (Get Diem Den List):", response.data)
+
+        // API trả về: [{ diem_den_id, ten_diem_den }, ...]
+        const data = Array.isArray(response.data) ? response.data : []
+        setDiemDenList(data)
+      } catch (error: any) {
+        console.error("❌ Lỗi khi fetch danh sách điểm đến:", error)
+
+        if (axios.isAxiosError(error)) {
+          if (error.response?.status === 401) {
+            toast({
+              title: "Phiên đăng nhập hết hạn",
+              description: "Vui lòng đăng nhập lại",
+              variant: "destructive",
+            })
+            router.replace("/login")
+          } else if (error.response?.status === 403) {
+            toast({
+              title: "Không có quyền",
+              description: "Bạn không có quyền xem điểm đến của chuyến đi này",
+              variant: "destructive",
+            })
+          } else if (error.response?.status === 404) {
+            console.warn("Không tìm thấy điểm đến cho chuyến đi này")
+          } else {
+            toast({
+              title: "Lỗi tải danh sách điểm đến",
+              description: error.response?.data?.message || "Không thể tải danh sách điểm đến",
+              variant: "destructive",
+            })
+          }
+        }
+      } finally {
+        setIsLoadingDiemDen(false)
+      }
+    }
+
+    fetchDiemDenList()
+  }, [tripId, router, toast])
+
+  // Fetch danh sách ngày khi chọn điểm đến
+  const fetchDanhSachNgay = async (diemDenId: string) => {
+    setIsLoadingNgay(true)
+    setDanhSachNgay([])
+    setSelectedNgay("")
+
+    const token = Cookies.get("token")
+    if (!token || token === "null" || token === "undefined") {
+      console.warn("Không có token để fetch danh sách ngày")
+      setIsLoadingNgay(false)
+      return
+    }
+
+    try {
+      const response = await axios.get(
+        `https://travel-planner-imdw.onrender.com/api/lich-trinh-ngay/${tripId}`,
+        {
+          params: {
+            diem_den_id: diemDenId,
+          },
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+
+      console.log("✅ API Response (Get Danh Sach Ngay):", response.data)
+
+      // API trả về: { danh_sach_ngay: [...] }
+      const data = response.data?.danh_sach_ngay || []
+      setDanhSachNgay(data)
+
+      // Tự động chọn ngày đầu tiên nếu có
+      if (data.length > 0) {
+        setSelectedNgay(data[0])
+      }
+    } catch (error: any) {
+      console.error("❌ Lỗi khi fetch danh sách ngày:", error)
+
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          toast({
+            title: "Phiên đăng nhập hết hạn",
+            description: "Vui lòng đăng nhập lại",
+            variant: "destructive",
+          })
+          router.replace("/login")
+        } else if (error.response?.status === 403) {
+          toast({
+            title: "Không có quyền",
+            description: "Bạn không có quyền xem danh sách ngày của điểm đến này",
+            variant: "destructive",
+          })
+        } else if (error.response?.status === 400) {
+          toast({
+            title: "Điểm đến chưa có ngày",
+            description: error.response?.data?.message || "Điểm đến này chưa có ngày bắt đầu và ngày kết thúc",
+            variant: "destructive",
+          })
+        } else if (error.response?.status === 404) {
+          toast({
+            title: "Không tìm thấy điểm đến",
+            description: error.response?.data?.message || "Không tìm thấy điểm đến",
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "Lỗi tải danh sách ngày",
+            description: error.response?.data?.message || "Không thể tải danh sách ngày",
+            variant: "destructive",
+          })
+        }
+      }
+    } finally {
+      setIsLoadingNgay(false)
+    }
+  }
+
+  // Xử lý khi chọn điểm đến từ dropdown
+  const handleDiemDenSelect = (diemDenId: string) => {
+    const selectedDiemDen = diemDenList.find((d) => String(d.diem_den_id) === diemDenId)
+
+    if (selectedDiemDen) {
+      setSelectedDiemDenId(diemDenId)
+      setOpenCombobox(false)
+
+      // Tự động fetch danh sách ngày khi chọn điểm đến
+      fetchDanhSachNgay(diemDenId)
+
+      toast({
+        title: "Đã chọn điểm đến",
+        description: `Đã chọn: ${selectedDiemDen.ten_diem_den}`,
+      })
+    }
+  }
 
   const expenseTypes = [
     { value: "ăn uống", label: "Ăn uống" },
@@ -136,6 +307,26 @@ export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpen
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Validation: Kiểm tra đã chọn điểm đến chưa
+    if (!selectedDiemDenId) {
+      toast({
+        title: "Thiếu thông tin",
+        description: "Vui lòng chọn điểm đến",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Validation: Kiểm tra đã chọn ngày chưa
+    if (!selectedNgay) {
+      toast({
+        title: "Thiếu thông tin",
+        description: "Vui lòng chọn ngày",
+        variant: "destructive",
+      })
+      return
+    }
 
     if (formData.thanhVienThamGia.length === 0) {
       toast({
@@ -288,7 +479,8 @@ export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpen
         chuyen_di_id: Number.parseInt(tripId),
         so_tien: Number.parseFloat(formData.soTien),
         nhom: formData.loaiChiPhi,
-        ngay: new Date().toISOString().split("T")[0], // Current date in YYYY-MM-DD format
+        ngay: selectedNgay || new Date().toISOString().split("T")[0], // Use selected date or current date
+        diem_den_id: selectedDiemDenId ? Number.parseInt(selectedDiemDenId) : null,
         mo_ta: formData.ghiChu || formData.tenChiPhi, // Use ghiChu or tenChiPhi as description
         tien_te: "VND",
         hinh_thuc_chia: hinhThucChia,
@@ -324,11 +516,36 @@ export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpen
         }
       )
 
-      const responseData = response.data
-      const createdExpense = responseData?.chi_phi || responseData
+      console.log("✅ API Response (Create Chi Phi):", response.data)
 
-      // Calculate split details for local state
-      const chiTietChia = calculateSplit()
+      const responseData = response.data
+      const createdExpense = responseData?.chi_phi
+      const chiTiet = responseData?.chi_tiet || []
+      const nganSachConLai = responseData?.ngan_sach_con_lai
+      const canhBao = responseData?.canh_bao || []
+      const canhBaoKeHoach = responseData?.canh_bao_ke_hoach
+
+      // Calculate split details for local state (sử dụng chi_tiet từ API nếu có)
+      const chiTietChia: Record<string, { soTien: number; daTra: boolean }> = {}
+      if (chiTiet && chiTiet.length > 0) {
+        chiTiet.forEach((item: any) => {
+          const member = members.find((m) => {
+            const memberNguoiDungId = m.nguoi_dung_id || Number.parseInt(String(m.id))
+            return memberNguoiDungId === item.nguoi_dung_id
+          })
+          if (member) {
+            chiTietChia[member.id] = {
+              soTien: Number.parseFloat(item.so_tien_phai_tra || 0),
+              daTra: member.id === formData.nguoiTraId,
+            }
+          }
+        })
+      } else {
+        // Fallback to local calculation
+        const localChiTiet = calculateSplit()
+        Object.assign(chiTietChia, localChiTiet)
+      }
+
       const nguoiTra = members.find((m) => m.id === formData.nguoiTraId)
 
       // Call onSubmit with the created expense data
@@ -340,6 +557,7 @@ export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpen
         chiTietChia,
         ngayChiTieu: apiPayload.ngay,
         _api: createdExpense,
+        _chi_tiet: chiTiet,
       })
 
       // ✅ Lưu hình thức chia vào localStorage sau khi thêm thành công
@@ -350,31 +568,86 @@ export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpen
 
       // ✅ Hiển thị thông báo với thông tin từ API response
       const message = responseData?.message || "Chi phí mới đã được thêm và chia sẻ"
-      const nganSachConLai = responseData?.ngan_sach_con_lai
+      
+      // Tạo description với thông tin chi tiết
+      let description = message
+      
+      if (nganSachConLai !== undefined) {
+        description += `. Ngân sách còn lại: ${Number(nganSachConLai).toLocaleString("vi-VN")} VNĐ`
+      }
+
+      // Hiển thị cảnh báo nếu có
+      if (canhBao.length > 0) {
+        const canhBaoText = canhBao.map((cb: any) => cb.noi_dung).join(". ")
+        description += `. ⚠️ Cảnh báo: ${canhBaoText}`
+      }
+
+      if (canhBaoKeHoach) {
+        description += `. ⚠️ ${canhBaoKeHoach.message || ""}`
+      }
+
+      // Xác định variant dựa trên cảnh báo
+      const hasWarning = canhBao.length > 0 || canhBaoKeHoach || (nganSachConLai !== undefined && nganSachConLai < 0)
       
       toast({
-        title: "Thành công",
-        description: nganSachConLai !== undefined 
-          ? `${message}. Ngân sách còn lại: ${Number(nganSachConLai).toLocaleString("vi-VN")} VNĐ`
-          : message,
-        variant: nganSachConLai !== undefined && nganSachConLai < 0 ? "destructive" : "default",
+        title: hasWarning ? "Thành công (có cảnh báo)" : "Thành công",
+        description: description,
+        variant: hasWarning ? "default" : "default",
       })
 
       onClose()
     } catch (error: any) {
       console.error("Lỗi khi thêm chi phí:", error)
       
-      if (error?.response?.status === 401 || error?.response?.status === 403) {
-        toast({
-          title: "Lỗi xác thực",
-          description: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
-          variant: "destructive",
-        })
-        router.replace("/login")
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          toast({
+            title: "Lỗi xác thực",
+            description: error.response?.data?.message || "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+            variant: "destructive",
+          })
+          router.replace("/login")
+        } else if (error.response?.status === 403) {
+          toast({
+            title: "Không có quyền",
+            description: error.response?.data?.message || "Bạn không có quyền thêm chi phí cho chuyến đi này.",
+            variant: "destructive",
+          })
+        } else if (error.response?.status === 400) {
+          toast({
+            title: "Dữ liệu không hợp lệ",
+            description: error.response?.data?.message || "Vui lòng kiểm tra lại thông tin đã nhập.",
+            variant: "destructive",
+          })
+        } else if (error.response?.status === 404) {
+          toast({
+            title: "Không tìm thấy",
+            description: error.response?.data?.message || "Không tìm thấy chuyến đi hoặc điểm đến.",
+            variant: "destructive",
+          })
+        } else if (error.response?.status === 409) {
+          toast({
+            title: "Chi phí đã tồn tại",
+            description: error.response?.data?.message || "Chi phí này đã được tạo trước đó.",
+            variant: "destructive",
+          })
+        } else if (error.response?.status === 500) {
+          toast({
+            title: "Lỗi server",
+            description: error.response?.data?.message || error.response?.data?.error || "Có lỗi xảy ra trên server. Vui lòng thử lại sau.",
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "Lỗi thêm chi phí",
+            description: error.response?.data?.message || "Có lỗi xảy ra khi thêm chi phí",
+            variant: "destructive",
+          })
+        }
       } else {
         toast({
           title: "Lỗi thêm chi phí",
-          description: error?.response?.data?.message || "Có lỗi xảy ra khi thêm chi phí",
+          description: "Có lỗi xảy ra khi thêm chi phí",
           variant: "destructive",
         })
       }
@@ -403,24 +676,122 @@ export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpen
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Basic Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Điểm đến và Ngày cùng một hàng */}
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="tenChiPhi">Tên chi phí</Label>
-                  <div className="relative">
-                    <Receipt className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="tenChiPhi"
-                      type="text"
-                      placeholder="Ví dụ: Ăn trưa tại nhà hàng"
-                      value={formData.tenChiPhi}
-                      onChange={(e) => handleChange("tenChiPhi", e.target.value)}
-                      className="pl-10"
-                      required
-                    />
-                  </div>
+                  <Label htmlFor="diem_den">Chọn điểm đến <span className="text-red-500">*</span></Label>
+                  <Popover open={openCombobox} onOpenChange={setOpenCombobox}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openCombobox}
+                        className="w-full justify-between"
+                        disabled={isLoadingDiemDen}
+                      >
+                        {selectedDiemDenId
+                          ? diemDenList.find((d) => String(d.diem_den_id) === selectedDiemDenId)?.ten_diem_den
+                          : isLoadingDiemDen
+                            ? "Đang tải..."
+                            : "Chọn điểm đến"}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0" align="start">
+                      {/* này là phần chọn điểm  */}
+                      <Command>
+                        <CommandInput placeholder="Tìm kiếm điểm đến..." />
+                        <CommandList>
+                          <CommandEmpty>
+                            {isLoadingDiemDen ? "Đang tải..." : "Không tìm thấy điểm đến."}
+                          </CommandEmpty>
+                          <CommandGroup>
+                            {diemDenList.map((diemDen) => (
+                              <CommandItem
+                                key={diemDen.diem_den_id}
+                                value={diemDen.ten_diem_den}
+                                onSelect={() => handleDiemDenSelect(String(diemDen.diem_den_id))}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    selectedDiemDenId === String(diemDen.diem_den_id) ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {diemDen.ten_diem_den}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
+                <div className="space-y-2">
+                  <Label htmlFor="ngay">Chọn ngày <span className="text-red-500">*</span></Label>
+                  <Popover open={openNgayCombobox} onOpenChange={setOpenNgayCombobox}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openNgayCombobox}
+                        className="w-full justify-between"
+                        disabled={!selectedDiemDenId || isLoadingNgay || danhSachNgay.length === 0}
+                      >
+                        {selectedNgay
+                          ? new Date(selectedNgay).toLocaleDateString("vi-VN")
+                          : isLoadingNgay
+                            ? "Đang tải ngày..."
+                            : !selectedDiemDenId
+                            ? "Chọn điểm đến trước"
+                            : danhSachNgay.length === 0
+                            ? "Không có ngày"
+                            : "Chọn ngày"}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Tìm kiếm ngày..." />
+                        <CommandList>
+                          <CommandEmpty>
+                            {isLoadingNgay ? "Đang tải..." : "Không tìm thấy ngày."}
+                          </CommandEmpty>
+                          <CommandGroup>
+                            {danhSachNgay.map((ngay) => (
+                              <CommandItem
+                                key={ngay}
+                                value={ngay}
+                                onSelect={() => {
+                                  setSelectedNgay(ngay)
+                                  setOpenNgayCombobox(false)
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    selectedNgay === ngay ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {new Date(ngay).toLocaleDateString("vi-VN", {
+                                  weekday: "long",
+                                  year: "numeric",
+                                  month: "long",
+                                  day: "numeric",
+                                })}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+
+              {/* Basic Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="soTien">Số tiền (VNĐ)</Label>
                   <div className="relative">
@@ -456,7 +827,7 @@ export function AddExpenseModal({ onClose, onSubmit, members, tripId }: AddExpen
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="nguoiTra">Người trả</Label>
+                  <Label htmlFor="nguoiTra">Người chi</Label>
                   <select
                     id="nguoiTra"
                     value={formData.nguoiTraId}

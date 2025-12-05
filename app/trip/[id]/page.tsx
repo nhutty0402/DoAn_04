@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Users, Calendar, MapPin, DollarSign, MessageCircle, Settings, Copy, Check } from "lucide-react"
+import { ArrowLeft, Users, Calendar, MapPin, DollarSign, MessageCircle, Settings, Copy, Check, ClipboardList } from "lucide-react"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { ItineraryTab } from "@/components/trip/itinerary-tab"
 import { MembersTab } from "@/components/trip/members-tab"
@@ -13,6 +13,7 @@ import { ChatTab } from "@/components/trip/chat-tab"
 import { OverviewTab } from "@/components/trip/overview-tab"
 import { MapsTab } from "@/components/trip/maps-tab" // Import MapsTab component
 import { SettingsTab } from "@/components/trip/settings-tab" // Import SettingsTab component
+import { PlanningTab } from "@/components/trip/planning-tab" // Import PlanningTab component
 import { useRouter } from "next/navigation"
 import Cookies from "js-cookie"
 
@@ -198,6 +199,26 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
         return statusConfig[status as keyof typeof statusConfig] || statusConfig.draft
     }
 
+    // Function để tính số ngày giữa ngày bắt đầu và ngày kết thúc
+    const calculateDays = (startDate: string, endDate: string): number => {
+        if (!startDate || !endDate) return 0
+        
+        const start = new Date(startDate)
+        const end = new Date(endDate)
+        
+        // Reset time về 00:00:00 để tính chính xác số ngày
+        start.setHours(0, 0, 0, 0)
+        end.setHours(0, 0, 0, 0)
+        
+        // Tính số milliseconds giữa 2 ngày
+        const diffTime = end.getTime() - start.getTime()
+        
+        // Chuyển đổi sang số ngày (1 ngày = 86400000 milliseconds)
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1 // +1 để bao gồm cả ngày đầu và ngày cuối
+        
+        return diffDays > 0 ? diffDays : 0
+    }
+
     if (loading) {
         return (
             <div className="min-h-screen bg-background">
@@ -288,7 +309,7 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
                                             </p>
                                             {trip.ngay_bat_dau && trip.ngay_ket_thuc && (
                                                 <p className="text-xs text-muted-foreground mt-1">
-                                                    Tổng cộng <span className="font-bold text-primary">335 ngày</span>
+                                                    Tổng cộng <span className="font-bold text-primary">{calculateDays(trip.ngay_bat_dau, trip.ngay_ket_thuc)} ngày</span>
                                                 </p>
                                             )}
                                         </div>
@@ -307,8 +328,8 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
                                         {/* <Users className="h-4 w-4 text-primary" /> */}
                                         <MapPin className="h-4 w-4 text-primary" />
                                         <div>
-                                            <p className="text-sm text-muted-foreground">Địa điểm đến</p>
-                                            <p className="font-semibold">{trip.dia_diem_den || "Chưa cập nhật"}</p>
+                                            <p className="text-sm text-muted-foreground">Địa xuất phát đầu tiên</p>
+                                            <p className="font-semibold">{trip.dia_diem_xuat_phat || "Chưa cập nhật"}</p>
                                         </div>
                                     </div>
                                     {/* <div>
@@ -396,10 +417,14 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
 
                 {/* Tabs */}
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                    <TabsList className="grid w-full grid-cols-7">
+                    <TabsList className="grid w-full grid-cols-8">
                         <TabsTrigger value="overview" className="flex items-center gap-2">
                             <MapPin className="h-4 w-4" />
                             <span className="hidden sm:inline">Tổng quan</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="planning" className="flex items-center gap-2">
+                            <ClipboardList className="h-4 w-4" />
+                            <span className="hidden sm:inline">Lên kế hoạch</span>
                         </TabsTrigger>
                         <TabsTrigger value="itinerary" className="flex items-center gap-2">
                             <Calendar className="h-4 w-4" />
@@ -429,6 +454,9 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
 
                     <TabsContent value="overview">
                         <OverviewTab trip={trip} onSwitchTab={setActiveTab} />
+                    </TabsContent>
+                    <TabsContent value="planning">
+                        <PlanningTab tripId={resolvedParams.id} />
                     </TabsContent>
                     <TabsContent value="itinerary">
                         <ItineraryTab

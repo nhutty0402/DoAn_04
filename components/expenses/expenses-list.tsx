@@ -1,10 +1,10 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { MoreVertical, Edit, Trash2, Receipt, Users, Calendar, ChevronDown, ChevronUp, Loader2 } from "lucide-react"
+import { MoreVertical, Edit, Trash2, Receipt, Users, Calendar, ChevronDown, ChevronUp, Loader2, MapPin } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { motion } from "framer-motion"
 import axios from "axios"
@@ -16,15 +16,113 @@ interface ExpensesListProps {
   expenses: any[]
   members: any[]
   onUpdateExpense: (expenses: any[]) => void
+  tripId: string
 }
 
-export function ExpensesList({ expenses, members, onUpdateExpense }: ExpensesListProps) {
+export function ExpensesList({ expenses, members, onUpdateExpense, tripId }: ExpensesListProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [expandedExpense, setExpandedExpense] = useState<string | null>(null)
   const [loadingDetail, setLoadingDetail] = useState<string | null>(null)
   const [expenseDetails, setExpenseDetails] = useState<Record<string, any>>({})
   const [deletingExpense, setDeletingExpense] = useState<string | null>(null)
+  const [isLoadingExpenses, setIsLoadingExpenses] = useState(false)
+  const [apiExpenses, setApiExpenses] = useState<any[]>([])
+
+  // Fetch danh sách chi phí từ API
+  useEffect(() => {
+    const fetchExpenses = async () => {
+      setIsLoadingExpenses(true)
+      const token = Cookies.get("token")
+      
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("Không có token để fetch chi phí")
+        setIsLoadingExpenses(false)
+        return
+      }
+
+      try {
+        const response = await axios.get(
+          `https://travel-planner-imdw.onrender.com/api/chi-phi/chuyen-di/${tripId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        )
+
+        console.log("✅ API Response (Get Chi Phi):", response.data)
+
+        const responseData = response.data
+        const danhSach = responseData?.danh_sach || []
+
+        // Map dữ liệu từ API sang format hiện tại
+        const mappedExpenses = danhSach.map((item: any) => ({
+          id: String(item.chi_phi_id),
+          chi_phi_id: item.chi_phi_id,
+          tenChiPhi: item.mo_ta || `${item.nhom} - ${item.ten_diem_den || ""}`.trim() || "Chi phí",
+          soTien: Number.parseFloat(item.so_tien || 0),
+          ngayChiTieu: item.ngay || item.tao_luc?.split("T")[0] || new Date().toISOString().split("T")[0],
+          loaiChiPhi: item.nhom || "khác",
+          nguoiTra: item.nguoi_chi || "Unknown",
+          nguoiTraId: String(item.nguoi_chi_id),
+          ghiChu: item.mo_ta || "",
+          hinhThucChia: item.hinh_thuc_chia || "equal",
+          thanhVienThamGia: [], // Sẽ được load từ chi tiết
+          chiTietChia: {}, // Sẽ được load từ chi tiết
+          // Thêm các trường mới từ API
+          tien_te: item.tien_te || "VND",
+          ten_diem_den: item.ten_diem_den || null,
+          diem_den_id: item.diem_den_id || null,
+          diem_den_thu_tu: item.diem_den_thu_tu || null,
+          tao_luc: item.tao_luc || null,
+        }))
+
+        setApiExpenses(mappedExpenses)
+        onUpdateExpense(mappedExpenses)
+      } catch (error: any) {
+        console.error("❌ Lỗi khi fetch danh sách chi phí:", error)
+
+        if (axios.isAxiosError(error)) {
+          if (error.response?.status === 401) {
+            toast({
+              title: "Phiên đăng nhập hết hạn",
+              description: "Vui lòng đăng nhập lại",
+              variant: "destructive",
+            })
+            router.replace("/login")
+          } else if (error.response?.status === 403) {
+            toast({
+              title: "Không có quyền",
+              description: "Bạn không có quyền xem chi phí của chuyến đi này",
+              variant: "destructive",
+            })
+          } else if (error.response?.status === 404) {
+            console.warn("Không tìm thấy chi phí cho chuyến đi này")
+            setApiExpenses([])
+            onUpdateExpense([])
+          } else {
+            toast({
+              title: "Lỗi tải danh sách chi phí",
+              description: error.response?.data?.message || "Không thể tải danh sách chi phí",
+              variant: "destructive",
+            })
+          }
+        }
+      } finally {
+        setIsLoadingExpenses(false)
+      }
+    }
+
+    if (tripId) {
+      fetchExpenses()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripId])
+
+  // Sử dụng apiExpenses nếu có, nếu không thì dùng expenses từ props
+  const displayExpenses = apiExpenses.length > 0 ? apiExpenses : expenses
 
   // ✅ Hàm lấy chi_phi_id từ expense (đảm bảo string)
   const getExpenseId = (expense: any): string | null => {
@@ -129,7 +227,8 @@ export function ExpensesList({ expenses, members, onUpdateExpense }: ExpensesLis
       })
 
       // ✅ Xóa chi phí khỏi danh sách
-      const updatedExpenses = expenses.filter((exp) => exp.id !== chiPhiId && exp.chi_phi_id !== chiPhiId)
+      const updatedExpenses = displayExpenses.filter((exp) => exp.id !== chiPhiId && exp.chi_phi_id !== chiPhiId)
+      setApiExpenses(updatedExpenses)
       onUpdateExpense(updatedExpenses)
 
       // ✅ Xóa chi tiết đã lưu
@@ -191,6 +290,7 @@ export function ExpensesList({ expenses, members, onUpdateExpense }: ExpensesLis
     const methods = {
       equal: "Chia đều",
       shares: "Theo phần",
+      custom: "Theo phần",
       percent: "Theo %",
     }
     return methods[method as keyof typeof methods] || "Chia đều"
@@ -208,16 +308,25 @@ export function ExpensesList({ expenses, members, onUpdateExpense }: ExpensesLis
     return Object.values(expense.chiTietChia).filter((detail: any) => detail.daTra).length
   }
 
+  if (isLoadingExpenses) {
+    return (
+      <div className="text-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+        <p className="text-muted-foreground">Đang tải danh sách chi phí...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
-      {expenses.length === 0 ? (
+      {displayExpenses.length === 0 ? (
         <div className="text-center py-12">
           <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-foreground mb-2">Chưa có chi phí nào</h3>
           <p className="text-muted-foreground">Bắt đầu bằng cách thêm chi phí đầu tiên</p>
         </div>
       ) : (
-        expenses.map((expense, index) => (
+        displayExpenses.map((expense, index) => (
           <motion.div
             key={expense.id}
             initial={{ opacity: 0, y: 20 }}
@@ -249,21 +358,27 @@ export function ExpensesList({ expenses, members, onUpdateExpense }: ExpensesLis
                         <Calendar className="h-4 w-4" />
                         <span>{new Date(expense.ngayChiTieu).toLocaleDateString("vi-VN")}</span>
                       </div>
-                      {/* NGƯỜI */}
-                      {/* <div className="flex items-center gap-1">
-                        <Users className="h-4 w-4" />
-                        <span>{getParticipantCount(expense)} người</span>
-                      </div> */}
+                      {expense.ten_diem_den && (
+                        <>
+                          <span>•</span>
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            <span>{expense.ten_diem_den}</span>
+                            {expense.diem_den_thu_tu && (
+                              <span className="text-xs">(#{expense.diem_den_thu_tu})</span>
+                            )}
+                          </div>
+                        </>
+                      )}
                       <span>•</span>
                       <span>{getSplitMethodLabel(expense.hinhThucChia)}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-right">
-                      <p className="text-2xl font-bold text-primary">{expense.soTien.toLocaleString("vi-VN")} VNĐ</p>
-                      {/* <p className="text-sm text-muted-foreground">
-                        {getPaidCount(expense)}/{getParticipantCount(expense)} đã trả
-                      </p> */}
+                      <p className="text-2xl font-bold text-primary">
+                        {expense.soTien.toLocaleString("vi-VN")} {expense.tien_te || "VNĐ"}
+                      </p>
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

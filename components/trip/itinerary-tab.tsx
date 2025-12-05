@@ -968,8 +968,8 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
 
     try {
       // Gọi API DELETE để xóa lịch trình
-      await axios.delete(
-        `https://travel-planner-imdw.onrender.com/api/lich-trinh-ngay/xoa/${lichTrinhId}`,
+      const response = await axios.delete(
+        `https://travel-planner-imdw.onrender.com/api/lich-trinh-ngay/${lichTrinhId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -977,12 +977,17 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
         }
       )
 
+      console.log("✅ API Response (Delete Lich Trinh):", response.data)
+
+      // Lấy message từ response
+      const message = response.data?.message || "Xóa lịch trình thành công"
+
       // Refresh lại danh sách lịch trình từ API
       await fetchDaysAndPoisFromAPI()
 
       toast({
         title: "Đã xóa lịch trình",
-        description: "Lịch trình đã được xóa khỏi điểm đến",
+        description: message,
       })
     } catch (error) {
       console.error("Lỗi khi xóa lịch trình:", error)
@@ -995,21 +1000,33 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
         })
         router.replace("/login")
       } else if (axios.isAxiosError(error) && error.response?.status === 403) {
+        const errorMessage = error.response?.data?.message || "Chỉ chủ chuyến đi mới được xóa lịch trình"
         toast({
           title: "Không có quyền",
-          description: "Chỉ chủ chuyến đi mới được xóa lịch trình.",
+          description: errorMessage,
           variant: "destructive",
         })
       } else if (axios.isAxiosError(error) && error.response?.status === 404) {
+        const errorMessage = error.response?.data?.message || "Không tìm thấy lịch trình"
         toast({
           title: "Không tìm thấy lịch trình",
-          description: "Lịch trình này có thể đã bị xóa.",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      } else if (axios.isAxiosError(error) && error.response?.status === 500) {
+        const errorMessage = error.response?.data?.error || error.response?.data?.message || "Có lỗi xảy ra trên server"
+        toast({
+          title: "Lỗi server",
+          description: errorMessage,
           variant: "destructive",
         })
       } else {
+        const errorMessage = axios.isAxiosError(error) 
+          ? (error.response?.data?.message || "Không thể xóa lịch trình. Vui lòng thử lại.")
+          : "Không thể xóa lịch trình. Vui lòng thử lại."
         toast({
           title: "Lỗi xóa lịch trình",
-          description: "Không thể xóa lịch trình. Vui lòng thử lại.",
+          description: errorMessage,
           variant: "destructive",
         })
       }
