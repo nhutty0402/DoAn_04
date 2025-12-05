@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Users, Calendar, MapPin, DollarSign, MessageCircle, Settings, Copy, Check, Navigation2, Sparkles } from "lucide-react"
+import { ArrowLeft, Users, Calendar, MapPin, DollarSign, MessageCircle, Settings, Copy, Check, Navigation2, Sparkles, ClipboardList } from "lucide-react"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { ItineraryTab } from "@/components/trip/itinerary-tab"
 import { MembersTab } from "@/components/trip/members-tab"
@@ -14,6 +14,7 @@ import { OverviewTab } from "@/components/trip/overview-tab"
 import { MapsTab } from "@/components/trip/maps-tab" // Import MapsTab component
 import { SettingsTab } from "@/components/trip/settings-tab" // Import SettingsTab component
 import { SmartSuggestionsTab } from "@/components/trip/smart-suggestions-tab" // Import SmartSuggestionsTab component
+import { PlanningTab } from "@/components/trip/planning-tab" // Import PlanningTab component
 import { useRouter } from "next/navigation"
 import Cookies from "js-cookie"
 
@@ -397,7 +398,7 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
 
                 {/* Tabs */}
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                    <TabsList className="grid w-full grid-cols-8">
+                    <TabsList className="grid w-full grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-9">
                         <TabsTrigger value="overview" className="flex items-center gap-2">
                             <MapPin className="h-4 w-4" />
                             <span className="hidden sm:inline">Tổng quan</span>
@@ -425,6 +426,10 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
                         <TabsTrigger value="suggestions" className="flex items-center gap-2">
                             <Sparkles className="h-4 w-4" />
                             <span className="hidden sm:inline">Gợi ý thông minh</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="planning" className="flex items-center gap-2">
+                            <ClipboardList className="h-4 w-4" />
+                            <span className="hidden sm:inline">Kế hoạch</span>
                         </TabsTrigger>
                         {/* <TabsTrigger value="settings" className="flex items-center gap-2">
                             <Settings className="h-4 w-4" />
@@ -459,6 +464,10 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
 
                     <TabsContent value="suggestions">
                         <SmartSuggestionsTab tripId={resolvedParams.id} />
+                    </TabsContent>
+
+                    <TabsContent value="planning">
+                        <PlanningTab tripId={resolvedParams.id} />
                     </TabsContent>
 
                     <TabsContent value="settings">
