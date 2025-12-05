@@ -254,8 +254,8 @@ export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps)
         // Backend trả về: { message, tong_so, chua_doc, danh_sach: [...] }
         // Backend đã sắp xếp ORDER BY tao_luc DESC rồi
         const apiData = response.data?.danh_sach || []
-        const mappedNotifications: Notification[] = apiData.map((item: any) => ({
-          id: String(item.thong_bao_id || ""),
+        const mappedNotifications: Notification[] = apiData.map((item: any, index: number) => ({
+          id: item.thong_bao_id ? String(item.thong_bao_id) : `notification-${index}-${Date.now()}`,
           type: mapLoaiToType(item.loai || ""),
           title: generateTitle(item.loai || ""),
           message: item.noi_dung || "",
@@ -428,9 +428,9 @@ export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps)
                   ) : (
                     <>
                       {/* Invitations Section */}
-                      {invitations.map((invitation) => (
+                      {invitations.map((invitation, index) => (
                         <motion.div
-                          key={`invitation-${invitation.moi_id}`}
+                          key={invitation.moi_id ? `invitation-${invitation.moi_id}` : `invitation-${index}-${Date.now()}`}
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: 20 }}
