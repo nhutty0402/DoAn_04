@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { PieChart, BarChart, TrendingUp, Users, DollarSign, AreaChart as AreaChartIcon } from "lucide-react"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { Area, AreaChart, XAxis, YAxis, CartesianGrid, Legend } from "recharts"
@@ -58,6 +59,36 @@ interface MemberExpenseApiResponse {
   du_lieu: MemberExpenseData[]
 }
 
+interface DiemDenExpenseDetail {
+  chi_phi_id: number
+  nhom: string
+  mo_ta: string
+  ngay: string
+  so_tien: string
+  hinh_thuc_chia: string
+  diem_den_id: number
+  nguoi_chi: string
+  ten_diem_den: string
+  thu_tu: number
+}
+
+interface DiemDenExpenseData {
+  diem_den_id: number
+  ten_diem_den: string
+  thu_tu: number
+  tong_tien: number
+  tong_tien_vnd_doc: string
+  chi_tiet: DiemDenExpenseDetail[]
+}
+
+interface DiemDenExpenseApiResponse {
+  message: string
+  kieu_bao_cao: string
+  tong_cong: number
+  tong_cong_vnd_doc: string
+  du_lieu: DiemDenExpenseData[]
+}
+
 export function ExpenseReports({ expenses, members, tripId }: ExpenseReportsProps) {
   const router = useRouter()
   const [chartData, setChartData] = useState<ChartApiResponse | null>(null)
@@ -66,6 +97,9 @@ export function ExpenseReports({ expenses, members, tripId }: ExpenseReportsProp
   const [memberExpenseData, setMemberExpenseData] = useState<MemberExpenseApiResponse | null>(null)
   const [loadingMemberExpenses, setLoadingMemberExpenses] = useState(false)
   const [memberExpenseError, setMemberExpenseError] = useState<string | null>(null)
+  const [diemDenExpenseData, setDiemDenExpenseData] = useState<DiemDenExpenseApiResponse | null>(null)
+  const [loadingDiemDenExpenses, setLoadingDiemDenExpenses] = useState(false)
+  const [diemDenExpenseError, setDiemDenExpenseError] = useState<string | null>(null)
 
   // Debug: Log tripId prop
   useEffect(() => {
@@ -315,6 +349,75 @@ export function ExpenseReports({ expenses, members, tripId }: ExpenseReportsProp
     }
 
     fetchMemberExpenseData()
+  }, [tripId, router])
+
+  // Gọi API lấy dữ liệu chi phí theo điểm đến
+  useEffect(() => {
+    if (!tripId) {
+      console.warn("⚠️ Không có tripId, không thể gọi API chi phí theo điểm đến")
+      return
+    }
+
+    const fetchDiemDenExpenseData = async () => {
+      setLoadingDiemDenExpenses(true)
+      setDiemDenExpenseError(null)
+
+      const token = Cookies.get("token")
+      console.log("🔑 Token từ cookie:", token)
+      console.log("🆔 Trip ID:", tripId)
+
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("❌ Không có token → chuyển về /login")
+        router.replace("/login")
+        return
+      }
+
+      const apiUrl = `https://travel-planner-imdw.onrender.com/api/chi-phi/bao-cao/${tripId}?kieu=diemden`
+      console.log("🌐 Gọi API URL chi phí theo điểm đến:", apiUrl)
+
+      try {
+        const response = await axios.get(apiUrl, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        })
+
+        console.log("✅ API Response chi phí theo điểm đến - Status:", response.status)
+        console.log("✅ API Response chi phí theo điểm đến - Data:", JSON.stringify(response.data, null, 2))
+
+        // Validate response structure
+        if (!response.data) {
+          console.error("❌ Response data is null/undefined")
+          setDiemDenExpenseError("Dữ liệu từ API không hợp lệ")
+          return
+        }
+
+        const data = response.data
+
+        // Validate required fields
+        if (!Array.isArray(data.du_lieu)) {
+          console.error("❌ du_lieu is not an array:", data.du_lieu)
+          setDiemDenExpenseError("Dữ liệu du_lieu không hợp lệ")
+          return
+        }
+
+        console.log(`✅ Validated diem den expense data: ${data.du_lieu.length} diem den`)
+        
+        setDiemDenExpenseData(data)
+      } catch (error: any) {
+        console.error("❌ Lỗi khi lấy dữ liệu chi phí theo điểm đến:", error)
+        console.error("❌ Error response:", error.response?.data)
+        console.error("❌ Error status:", error.response?.status)
+        
+        const errorMessage = error.response?.data?.message || error.message || "Không thể tải dữ liệu chi phí theo điểm đến"
+        setDiemDenExpenseError(errorMessage)
+      } finally {
+        setLoadingDiemDenExpenses(false)
+      }
+    }
+
+    fetchDiemDenExpenseData()
   }, [tripId, router])
 
   // Chuẩn bị dữ liệu cho Area Chart
@@ -572,6 +675,141 @@ export function ExpenseReports({ expenses, members, tripId }: ExpenseReportsProp
           </CardContent>
         </Card>
       </div>
+
+      {/* Chi Phí Theo Điểm Đến */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <PieChart className="h-5 w-5 text-primary" />
+            Chi Phí Theo Điểm Đến
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingDiemDenExpenses ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="text-muted-foreground">Đang tải dữ liệu...</div>
+            </div>
+          ) : diemDenExpenseError ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="text-destructive">{diemDenExpenseError}</div>
+            </div>
+          ) : !diemDenExpenseData ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="text-muted-foreground">Đang khởi tạo...</div>
+            </div>
+          ) : diemDenExpenseData.du_lieu.length === 0 ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="text-muted-foreground">Chưa có dữ liệu chi phí theo điểm đến</div>
+            </div>
+            ) : (
+            <div className="space-y-4">
+              <style>{`
+                .custom-thin-scrollbar::-webkit-scrollbar {
+                  width: 6px;
+                }
+                .custom-thin-scrollbar::-webkit-scrollbar-track {
+                  background: transparent;
+                }
+                .custom-thin-scrollbar::-webkit-scrollbar-thumb {
+                  background-color: rgba(156, 163, 175, 0.3);
+                  border-radius: 3px;
+                }
+                .custom-thin-scrollbar::-webkit-scrollbar-thumb:hover {
+                  background-color: rgba(156, 163, 175, 0.5);
+                }
+              `}</style>
+              {diemDenExpenseData.du_lieu
+                .sort((a, b) => (a.thu_tu || 0) - (b.thu_tu || 0))
+                .map((diemDen) => (
+                  <div key={diemDen.diem_den_id} className="space-y-3 p-4 bg-muted/30 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
+                          {diemDen.thu_tu || "#"}
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-foreground">{diemDen.ten_diem_den}</h4>
+                          <p className="text-xs text-muted-foreground">
+                            {diemDen.chi_tiet.length} chi phí
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-primary">
+                          {diemDen.tong_tien.toLocaleString("vi-VN")} VNĐ
+                        </p>
+                      </div>
+                    </div>
+                    {/* Chi tiết chi phí */}
+                    {diemDen.chi_tiet.length > 0 && (
+                      <div className="mt-3 pt-3 border-t">
+                        <div 
+                          className="max-h-64 overflow-y-auto space-y-2 pr-2 custom-thin-scrollbar"
+                          style={{
+                            scrollbarWidth: 'thin',
+                            scrollbarColor: 'rgba(156, 163, 175, 0.3) transparent',
+                          }}
+                        >
+                          {diemDen.chi_tiet.map((chiPhi) => (
+                            <div
+                              key={chiPhi.chi_phi_id}
+                              className="flex items-center justify-between p-2 bg-background rounded-md text-sm"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium truncate">{chiPhi.mo_ta || chiPhi.nhom}</span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {chiPhi.nhom}
+                                  </Badge>
+                                </div>
+                                <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                                  <span>{new Date(chiPhi.ngay).toLocaleDateString("vi-VN")}</span>
+                                  <span>•</span>
+                                  <span>{chiPhi.nguoi_chi}</span>
+                                  <span>•</span>
+                                  <span>
+                                    {chiPhi.hinh_thuc_chia === "equal"
+                                      ? "Chia đều"
+                                      : chiPhi.hinh_thuc_chia === "custom"
+                                      ? "Theo phần"
+                                      : chiPhi.hinh_thuc_chia === "percent"
+                                      ? "Theo %"
+                                      : chiPhi.hinh_thuc_chia}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="text-right ml-4">
+                                <p className="font-semibold text-foreground">
+                                  {Number(chiPhi.so_tien).toLocaleString("vi-VN")} VNĐ
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              
+              {diemDenExpenseData.tong_cong > 0 && (
+                <div className="mt-4 pt-4 border-t">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">Tổng cộng:</span>
+                    <span className="text-lg font-bold text-primary">
+                      {diemDenExpenseData.tong_cong.toLocaleString("vi-VN")} VNĐ
+                    </span>
+                  </div>
+                  {diemDenExpenseData.tong_cong_vnd_doc && (
+                    <p className="text-xs text-muted-foreground text-right mt-1">
+                      {diemDenExpenseData.tong_cong_vnd_doc}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Daily Expenses */}
       <Card>

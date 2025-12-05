@@ -631,7 +631,7 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
         </TabsList>
 
         <TabsContent value="list">
-          <ExpensesList expenses={expenses} members={members.length > 0 ? members : mockMembers} onUpdateExpense={setExpenses} />
+          <ExpensesList expenses={expenses} members={members.length > 0 ? members : mockMembers} onUpdateExpense={setExpenses} tripId={tripId} />
         </TabsContent>
 
         <TabsContent value="reports">

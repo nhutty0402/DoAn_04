@@ -199,43 +199,7 @@ export function OverviewTab({ trip, onSwitchTab }: OverviewTabProps) {
         // },
     ]
 
-    // const recentActivities = [
-    //   {
-    //     action: "Thêm điểm đến",
-    //     detail: "Bãi biển Mỹ Khê",
-    //     user: "Nguyễn Văn A",
-    //     time: "2 giờ trước",
-    //     type: "location",
-    //   },
-    //   {
-    //     action: "Cập nhật chi phí",
-    //     detail: "Khách sạn Muong Thanh",
-    //     user: "Trần Thị B",
-    //     time: "5 giờ trước",
-    //     type: "expense",
-    //   },
-    //   {
-    //     action: "Mời thành viên",
-    //     detail: "Lê Văn C",
-    //     user: "Nguyễn Văn A",
-    //     time: "1 ngày trước",
-    //     type: "member",
-    //   },
-    //   {
-    //     action: "Xuất PDF",
-    //     detail: "Lịch trình chi tiết",
-    //     user: "Trần Thị B",
-    //     time: "2 ngày trước",
-    //     type: "export",
-    //   },
-    //   {
-    //     action: "Thanh toán",
-    //     detail: "Đặt cọc khách sạn",
-    //     user: "Nguyễn Văn A",
-    //     time: "3 ngày trước",
-    //     type: "payment",
-    //   },
-    // ]
+ 
 
     const handleExportPDF = async () => {
         setIsExporting(true)
