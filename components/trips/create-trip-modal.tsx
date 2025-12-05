@@ -147,7 +147,7 @@ export function CreateTripModal({ onClose, onSubmit }: CreateTripModalProps) {
       }
 
       // Sử dụng axios để gọi API
-      const response = await axios.post("https://travel-planner-imdw.onrender.com/api/chuyendi", bodyPayload, {
+      const response = await axios.post("https://travel-planner-imdw.onrender.com/api/chuyen-di", bodyPayload, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,

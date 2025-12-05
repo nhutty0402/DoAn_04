@@ -49,7 +49,7 @@ export default function DashboardPage() {
         return router.replace("/login")
       }
 
-      const res = await axios.get("https://travel-planner-imdw.onrender.com/api/chuyendi", {
+      const res = await axios.get("https://travel-planner-imdw.onrender.com/api/chuyen-di", {
         headers: {
           Authorization: `Bearer ${token}`,
           "Cache-Control": "no-cache",
@@ -182,7 +182,7 @@ export default function DashboardPage() {
         cong_khai: congKhaiVal,
       }
 
-      await axios.put(`https://travel-planner-imdw.onrender.com/api/chuyendi/${tripId}`,
+      await axios.put(`https://travel-planner-imdw.onrender.com/api/chuyen-di/${tripId}`,
         payload,
         { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, params: { _t: Date.now() } }
       )
@@ -222,7 +222,7 @@ export default function DashboardPage() {
       if (!tripId) {
         console.error("Không xác định được ID chuyến đi để xóa")
       } else {
-        await axios.delete(`https://travel-planner-imdw.onrender.com/api/chuyendi/${tripId}`, {
+        await axios.delete(`https://travel-planner-imdw.onrender.com/api/chuyen-di/${tripId}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },

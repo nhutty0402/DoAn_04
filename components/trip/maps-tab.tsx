@@ -578,7 +578,7 @@ export function MapsTab({ tripId }: MapsTabProps) {
       if (!token || token === "null" || token === "undefined") return
 
       const response = await axios.get(
-        `https://travel-planner-imdw.onrender.com/api/chuyendi/${tripId}`,
+        `https://travel-planner-imdw.onrender.com/api/chuyen-di/${tripId}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -610,7 +610,7 @@ export function MapsTab({ tripId }: MapsTabProps) {
       }
 
       const response = await axios.get(
-        `https://travel-planner-imdw.onrender.com/api/ve-may-bay/chuyendi/${tripId}/khu-hoi`,
+        `https://travel-planner-imdw.onrender.com/api/ve-may-bay/chuyen-di/${tripId}/khu-hoi`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }

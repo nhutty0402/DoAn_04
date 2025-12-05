@@ -70,7 +70,7 @@ export function OverviewTab({ trip, onSwitchTab }: OverviewTabProps) {
             if (!token || token === "null" || token === "undefined") return
             setIsLoadingAvatar(true)
             const res = await axios.get(
-                `https://travel-planner-imdw.onrender.com/api/chuyendi/${tripId}/anh-dai-dien`,
+                `https://travel-planner-imdw.onrender.com/api/chuyen-di/${tripId}/anh-dai-dien`,
                 {
                     headers: {
                         Authorization: `Bearer ${token}`,
@@ -112,7 +112,7 @@ export function OverviewTab({ trip, onSwitchTab }: OverviewTabProps) {
             if (!token || token === "null" || token === "undefined") return
             setIsLoadingDiemDen(true)
             const res = await axios.get(
-                `https://travel-planner-imdw.onrender.com/api/chuyendi/${tripId}`,
+                `https://travel-planner-imdw.onrender.com/api/chuyen-di/${tripId}`,
                 {
                     headers: {
                         Authorization: `Bearer ${token}`,
@@ -345,7 +345,7 @@ export function OverviewTab({ trip, onSwitchTab }: OverviewTabProps) {
             form.append("file", selectedAvatarFile)
             form.append("chuyen_di_id", String(tripId))
             const res = await axios.put(
-                "https://travel-planner-imdw.onrender.com/api/chuyendi/anh-dai-dien-file",
+                "https://travel-planner-imdw.onrender.com/api/chuyen-di/anh-dai-dien-file",
                 form,
                 {
                     headers: {

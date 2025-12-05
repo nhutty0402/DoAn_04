@@ -265,7 +265,7 @@ export default function PublicFeedPage() {
 
       // Gọi API lấy danh sách chuyến đi công khai
       const response = await axios.get(
-        "https://travel-planner-imdw.onrender.com/api/chuyendi/trang-thai/cong-khai",
+        "https://travel-planner-imdw.onrender.com/api/chuyen-di/trang-thai/cong-khai",
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -364,7 +364,7 @@ export default function PublicFeedPage() {
     setIsSubmittingReport(true)
     try {
       const response = await axios.post(
-        "https://travel-planner-imdw.onrender.com/api/chuyendi/bao-cao",
+        "https://travel-planner-imdw.onrender.com/api/chuyen-di/bao-cao",
         {
           loai: reportLoai,
           chuyen_di_id: parseInt(selectedTripId),
@@ -410,7 +410,7 @@ export default function PublicFeedPage() {
       }
 
       const response = await axios.post(
-        `https://travel-planner-imdw.onrender.com/api/chuyendi/${tripId}/thich`,
+        `https://travel-planner-imdw.onrender.com/api/chuyen-di/${tripId}/thich`,
         {},
         {
           headers: {
@@ -483,7 +483,7 @@ export default function PublicFeedPage() {
       let currentLikedIds = new Set<string>()
       try {
         const likedResponse = await axios.get(
-          "https://travel-planner-imdw.onrender.com/api/chuyendi/da-thich",
+          "https://travel-planner-imdw.onrender.com/api/chuyen-di/da-thich",
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -502,7 +502,7 @@ export default function PublicFeedPage() {
 
       // Gọi API hot trips mới
       const response = await axios.get(
-        "https://travel-planner-imdw.onrender.com/api/chuyendi/hot",
+        "https://travel-planner-imdw.onrender.com/api/chuyen-di/hot",
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -625,7 +625,7 @@ export default function PublicFeedPage() {
       }
 
       const response = await axios.get(
-        "https://travel-planner-imdw.onrender.com/api/chuyendi/da-thich",
+        "https://travel-planner-imdw.onrender.com/api/chuyen-di/da-thich",
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -771,7 +771,7 @@ export default function PublicFeedPage() {
       let currentLikedIds = new Set<string>()
       try {
         const likedResponse = await axios.get(
-          "https://travel-planner-imdw.onrender.com/api/chuyendi/da-thich",
+          "https://travel-planner-imdw.onrender.com/api/chuyen-di/da-thich",
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -789,7 +789,7 @@ export default function PublicFeedPage() {
       }
 
       const response = await axios.get(
-        "https://travel-planner-imdw.onrender.com/api/chuyendi/kham-pha",
+        "https://travel-planner-imdw.onrender.com/api/chuyen-di/kham-pha",
         {
           params: {
             limit: 20,
@@ -919,7 +919,7 @@ export default function PublicFeedPage() {
       let currentLikedIds = new Set<string>()
       try {
         const likedResponse = await axios.get(
-          "https://travel-planner-imdw.onrender.com/api/chuyendi/da-thich",
+          "https://travel-planner-imdw.onrender.com/api/chuyen-di/da-thich",
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -938,7 +938,7 @@ export default function PublicFeedPage() {
 
       // Gọi API chuyến đi phổ biến (mới nhất)
       const response = await axios.get(
-        "https://travel-planner-imdw.onrender.com/api/chuyendi/kham-pha/moi-nhat",
+        "https://travel-planner-imdw.onrender.com/api/chuyen-di/kham-pha/moi-nhat",
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -1086,7 +1086,7 @@ export default function PublicFeedPage() {
 
       // Gọi API chuyến đi liên quan
       const response = await axios.get(
-        `https://travel-planner-imdw.onrender.com/api/chuyendi/${tripId}/lien-quan`,
+        `https://travel-planner-imdw.onrender.com/api/chuyen-di/${tripId}/lien-quan`,
         {
           params: {
             limit: 10,

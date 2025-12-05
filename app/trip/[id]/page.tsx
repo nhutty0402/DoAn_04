@@ -92,7 +92,7 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
                 return
             }
 
-            const apiUrl = `https://travel-planner-imdw.onrender.com/api/chuyendi/${resolvedParams.id}`
+            const apiUrl = `https://travel-planner-imdw.onrender.com/api/chuyen-di/${resolvedParams.id}`
             console.log("🌐 Gọi API URL:", apiUrl)
 
             const response = await fetch(apiUrl, {
@@ -145,7 +145,7 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
             }
 
             const response = await fetch(
-                `https://travel-planner-imdw.onrender.com/api/chuyendi/${resolvedParams.id}/tien-do`,
+                `https://travel-planner-imdw.onrender.com/api/chuyen-di/${resolvedParams.id}/tien-do`,
                 {
                     method: "GET",
                     headers: {

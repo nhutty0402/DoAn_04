@@ -442,7 +442,7 @@ export default function PublicTripDetailPage() {
         }
 
         const response = await axios.get<TripDetailAPIResponse>(
-          `https://travel-planner-imdw.onrender.com/api/chuyendi/${id}`,
+          `https://travel-planner-imdw.onrender.com/api/chuyen-di/${id}`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
