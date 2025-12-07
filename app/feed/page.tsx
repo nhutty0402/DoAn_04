@@ -13,7 +13,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, MapPin, Calendar, Users, Eye, Download, Star, Loader2, MoreVertical, Flag, Home } from "lucide-react"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { Search, MapPin, Calendar, Users, Eye, Download, Star, Loader2, MoreVertical, Flag, Home, ChevronsUpDown, Check, X } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { motion } from "framer-motion"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -63,6 +66,72 @@ interface DiemDen {
   ngay_cuoi?: number
 }
 
+// Danh sách tỉnh thành Việt Nam
+const TINH_THANH = [
+  "An Giang",
+  "Bà Rịa - Vũng Tàu",
+  "Bạc Liêu",
+  "Bắc Giang",
+  "Bắc Kạn",
+  "Bắc Ninh",
+  "Bến Tre",
+  "Bình Định",
+  "Bình Dương",
+  "Bình Phước",
+  "Bình Thuận",
+  "Cà Mau",
+  "Cao Bằng",
+  "Cần Thơ (thành phố)",
+  "Đà Nẵng (thành phố)",
+  "Đắk Lắk",
+  "Đắk Nông",
+  "Điện Biên",
+  "Đồng Nai",
+  "Đồng Tháp",
+  "Gia Lai",
+  "Hà Giang",
+  "Hà Nam",
+  "Hà Nội (thủ đô)",
+  "Hải Dương",
+  "Hải Phòng (thành phố)",
+  "Hậu Giang",
+  "Hòa Bình",
+  "Thành phố Hồ Chí Minh (thành phố)",
+  "Hưng Yên",
+  "Khánh Hòa",
+  "Kiên Giang",
+  "Kon Tum",
+  "Lai Châu",
+  "Lạng Sơn",
+  "Lào Cai",
+  "Lâm Đồng",
+  "Long An",
+  "Nam Định",
+  "Nghệ An",
+  "Ninh Bình",
+  "Ninh Thuận",
+  "Phú Thọ",
+  "Phú Yên",
+  "Quảng Bình",
+  "Quảng Nam",
+  "Quảng Ngãi",
+  "Quảng Ninh",
+  "Quảng Trị",
+  "Sóc Trăng",
+  "Sơn La",
+  "Tây Ninh",
+  "Thái Bình",
+  "Thái Nguyên",
+  "Thanh Hóa",
+  "Thừa Thiên Huế",
+  "Tiền Giang",
+  "Trà Vinh",
+  "Tuyên Quang",
+  "Vĩnh Long",
+  "Vĩnh Phúc",
+  "Yên Bái",
+]
+
 // Interface cho trip hiển thị
 interface DisplayTrip {
   id: string
@@ -95,8 +164,11 @@ interface DisplayTrip {
 
 export default function PublicFeedPage() {
   const router = useRouter()
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedFilter, setSelectedFilter] = useState("all")
+  const [searchOrigin, setSearchOrigin] = useState("")
+  const [searchDestination, setSearchDestination] = useState("")
+  const [selectedFilter, setSelectedFilter] = useState("popular")
+  const [openOriginCombobox, setOpenOriginCombobox] = useState(false)
+  const [openDestinationCombobox, setOpenDestinationCombobox] = useState(false)
   const [trips, setTrips] = useState<DisplayTrip[]>([])
   const [filteredTrips, setFilteredTrips] = useState<DisplayTrip[]>([])
   const [loading, setLoading] = useState(true)
@@ -1056,6 +1128,173 @@ export default function PublicFeedPage() {
     }
   }, [router, likedTripIds])
 
+  // Fetch chuyến đi từ API tìm kiếm
+  const fetchSearchTrips = useCallback(async (diemXuatPhat?: string, diemDen?: string) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("Không có token → chuyển về /login")
+        router.replace("/login")
+        return
+      }
+
+      // Kiểm tra có ít nhất 1 điều kiện tìm kiếm
+      if (!diemXuatPhat && !diemDen) {
+        // Nếu không có điều kiện nào, gọi lại API mặc định
+        if (selectedFilter === "popular") {
+          await fetchPopularTrips()
+        } else {
+          await fetchTrips()
+        }
+        return
+      }
+
+      // Xây dựng query params
+      const params: Record<string, string> = {}
+      if (diemXuatPhat && diemXuatPhat.trim()) {
+        params.diem_xuat_phat = diemXuatPhat.trim()
+      }
+      if (diemDen && diemDen.trim()) {
+        params.diem_den = diemDen.trim()
+      }
+
+      // Gọi API tìm kiếm
+      const response = await axios.get(
+        "https://travel-planner-imdw.onrender.com/api/chuyen-di/tim-kiem",
+        {
+          params,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      console.log("✅ API Response (Search):", response.data)
+
+      const data = response.data?.danh_sach || []
+
+      if (!Array.isArray(data)) {
+        console.error("❌ Dữ liệu không hợp lệ từ API:", response.data)
+        throw new Error("Dữ liệu không hợp lệ từ API")
+      }
+
+      console.log(`✅ Nhận được ${data.length} chuyến đi từ API tìm kiếm`)
+
+      // Map data từ API sang format hiển thị
+      const mappedTrips = data
+        .map((trip: any, index: number) => {
+          try {
+            // Tạo TripFromAPI từ response của API tìm kiếm
+            const tripFromAPI: TripFromAPI = {
+              chuyen_di_id: trip.chuyen_di_id,
+              ten_chuyen_di: trip.ten_chuyen_di,
+              mo_ta: trip.mo_ta,
+              url_avt: trip.url_avt || null,
+              dia_diem_xuat_phat: trip.dia_diem_xuat_phat || null,
+              dia_diem_den: null,
+              ngay_bat_dau: trip.ngay_bat_dau,
+              ngay_ket_thuc: trip.ngay_ket_thuc,
+              chu_so_huu_id: 0,
+              tien_te: "VNĐ",
+              trang_thai: trip.trang_thai || null,
+              tong_ngan_sach: null,
+              tao_luc: trip.thoi_gian_tao || trip.tao_luc || null,
+              cong_khai: 1,
+              chu_so_huu_ten: trip.ten_chu_so_huu || null,
+              chu_so_huu_avatar: trip.avatar_chu_so_huu || null,
+              tong_thanh_vien: trip.so_thanh_vien || null,
+              tong_luot_thich: trip.tong_luot_thich || 0,
+              tong_chi_phi: trip.tong_tien || null,
+              ten_chu_so_huu: trip.ten_chu_so_huu,
+              avatar_chu_so_huu: trip.avatar_chu_so_huu,
+              so_thanh_vien: trip.so_thanh_vien,
+              so_ngay: trip.so_ngay,
+              diem_den: trip.diem_den || null,
+              thoi_gian_tao: trip.thoi_gian_tao,
+            }
+
+            const displayTrip = mapTripFromAPI(tripFromAPI, trip.so_ngay)
+            const tripId = String(trip.chuyen_di_id)
+
+            // Xử lý điểm đến
+            const diemDenWithDates: DiemDen[] = []
+            if (trip.diem_den && Array.isArray(trip.diem_den) && trip.diem_den.length > 0) {
+              let currentDay = 1
+              trip.diem_den.forEach((diem: { ten_diem_den: string; tong_ngay: number | null }) => {
+                const tongNgay = diem.tong_ngay || 1
+                diemDenWithDates.push({
+                  ten_diem_den: diem.ten_diem_den,
+                  tong_ngay: tongNgay,
+                  ngay_dau: currentDay,
+                  ngay_cuoi: currentDay + tongNgay - 1,
+                })
+                currentDay += tongNgay
+              })
+            }
+
+            // Format tong_tien để hiển thị
+            const tongTienFormatted = trip.tong_tien 
+              ? formatBudget(trip.tong_tien, "VNĐ")
+              : displayTrip.totalExpense
+
+            return {
+              ...displayTrip,
+              tong_luot_thich: trip.tong_luot_thich || 0,
+              da_thich: trip.da_thich || false,
+              so_ngay: trip.so_ngay || displayTrip.so_ngay,
+              diem_den: diemDenWithDates,
+              tao_luc: trip.thoi_gian_tao || displayTrip.tao_luc,
+              totalExpense: tongTienFormatted,
+            }
+          } catch (err) {
+            console.error(`❌ Lỗi khi map trip ${index}:`, err, trip)
+            return null
+          }
+        })
+        .filter((trip: DisplayTrip | null): trip is DisplayTrip => trip !== null)
+
+      // Cập nhật likedTripIds
+      const likedIds = new Set(
+        mappedTrips
+          .filter(trip => trip.da_thich)
+          .map(trip => trip.id)
+      )
+      setLikedTripIds(likedIds)
+
+      setTrips(mappedTrips)
+      setFilteredTrips(mappedTrips)
+      console.log(`✅ Đã tải và map thành công ${mappedTrips.length} chuyến đi từ tìm kiếm`)
+    } catch (error: any) {
+      console.error("❌ Lỗi khi tìm kiếm chuyến đi:", error)
+      setError("Không thể tìm kiếm chuyến đi. Vui lòng thử lại sau.")
+
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          toast.error("Phiên đăng nhập đã hết hạn")
+          router.replace("/login")
+        } else if (error.response?.status === 400) {
+          // API trả về 400 khi không có điều kiện tìm kiếm
+          // Không cần hiển thị lỗi, chỉ cần gọi lại API mặc định
+          if (selectedFilter === "popular") {
+            await fetchPopularTrips()
+          } else {
+            await fetchTrips()
+          }
+        } else {
+          toast.error(error.response?.data?.message || "Có lỗi xảy ra khi tìm kiếm chuyến đi")
+        }
+      } else {
+        toast.error("Có lỗi xảy ra khi tìm kiếm chuyến đi")
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [router, selectedFilter, fetchPopularTrips, fetchTrips])
+
   // Fetch danh sách chuyến đi liên quan
   const fetchRelatedTrips = useCallback(async (chuyenDiId?: string) => {
     setLoading(true)
@@ -1253,27 +1492,40 @@ export default function PublicFeedPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trips.length, selectedFilter, loading])
 
-  // Filter trips khi searchTerm hoặc selectedFilter thay đổi
+  // Gọi API tìm kiếm khi searchOrigin hoặc searchDestination thay đổi (với debounce)
+  useEffect(() => {
+    // Debounce timer
+    const timeoutId = setTimeout(() => {
+      // Chỉ gọi API nếu có ít nhất 1 điều kiện tìm kiếm
+      if (searchOrigin.trim() || searchDestination.trim()) {
+        fetchSearchTrips(searchOrigin, searchDestination)
+      } else {
+        // Nếu không có điều kiện tìm kiếm, gọi lại API mặc định theo filter
+        if (selectedFilter === "liked") {
+          fetchHotTripsNew()
+        } else if (selectedFilter === "popular") {
+          fetchPopularTrips()
+        } else if (selectedFilter === "recent") {
+          fetchLikedTrips()
+        } else if (selectedFilter === "all") {
+          if (trips.length === 0) {
+            fetchTrips()
+          } else {
+            fetchRelatedTrips(trips[0].id)
+          }
+        } else {
+          fetchTrips()
+        }
+      }
+    }, 500) // Debounce 500ms
+
+    return () => clearTimeout(timeoutId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchOrigin, searchDestination])
+
+  // Filter trips khi selectedFilter thay đổi (chỉ filter client-side cho các filter đặc biệt)
   useEffect(() => {
     let filtered = trips
-
-    // Filter by search term
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase()
-      filtered = filtered.filter((trip) => {
-        try {
-          return (
-            (trip.title || "").toLowerCase().includes(searchLower) ||
-            (trip.destination || "").toLowerCase().includes(searchLower) ||
-            trip.tags.some((tag) => (tag || "").toLowerCase().includes(searchLower)) ||
-            (trip.description || "").toLowerCase().includes(searchLower)
-          )
-        } catch (error) {
-          console.error("Lỗi khi filter trip:", error)
-          return false
-        }
-      })
-    }
 
     // Filter by category (skip if "liked" or "popular" because we already fetch filtered trips)
     if (selectedFilter !== "all" && selectedFilter !== "liked" && selectedFilter !== "popular") {
@@ -1300,7 +1552,7 @@ export default function PublicFeedPage() {
     }
 
     setFilteredTrips(filtered)
-  }, [searchTerm, selectedFilter, trips])
+  }, [selectedFilter, trips])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-50">
@@ -1364,15 +1616,133 @@ export default function PublicFeedPage() {
             <div className="w-full max-w-4xl">
 
               <div className="flex flex-col sm:flex-row gap-3 items-center">
-                {/* Search Input - Bo tròn */}
-                <div className="relative flex-1 max-w-xl w-full">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    placeholder="Tìm điểm đến, hoạt động..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 pr-4 h-10 text-sm bg-white/40 border-gray-300/40 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-2xl placeholder:text-gray-400 backdrop-blur-sm"
-                  />
+                {/* Search Comboboxes - Điểm xuất phát và Điểm đến */}
+                <div className="flex gap-2 flex-1 max-w-2xl w-full">
+                  {/* Điểm xuất phát */}
+                  <Popover open={openOriginCombobox} onOpenChange={setOpenOriginCombobox}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openOriginCombobox}
+                        className="flex-1 h-10 justify-between text-sm bg-white/40 border-gray-300/40 hover:bg-white/60 rounded-2xl backdrop-blur-sm"
+                      >
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4 text-gray-400" />
+                          <span className={searchOrigin ? "text-gray-900" : "text-gray-400"}>
+                            {searchOrigin || "Điểm xuất phát..."}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {searchOrigin && (
+                            <button
+                              type="button"
+                              className="p-1 rounded hover:bg-gray-100 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                e.preventDefault()
+                                setSearchOrigin("")
+                              }}
+                            >
+                              <X className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-pointer" />
+                            </button>
+                          )}
+                          <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+                        </div>
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Tìm kiếm tỉnh thành..." />
+                        <CommandList>
+                          <CommandEmpty>Không tìm thấy tỉnh thành.</CommandEmpty>
+                          <CommandGroup>
+                            {TINH_THANH.filter((tinh) => tinh !== searchDestination).map((tinh) => (
+                              <CommandItem
+                                key={tinh}
+                                value={tinh}
+                                onSelect={() => {
+                                  setSearchOrigin(tinh)
+                                  setOpenOriginCombobox(false)
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    searchOrigin === tinh ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {tinh}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  
+                  {/* Điểm đến */}
+                  <Popover open={openDestinationCombobox} onOpenChange={setOpenDestinationCombobox}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openDestinationCombobox}
+                        className="flex-1 h-10 justify-between text-sm bg-white/40 border-gray-300/40 hover:bg-white/60 rounded-2xl backdrop-blur-sm"
+                      >
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4 text-gray-400" />
+                          <span className={searchDestination ? "text-gray-900" : "text-gray-400"}>
+                            {searchDestination || "Điểm đến..."}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {searchDestination && (
+                            <button
+                              type="button"
+                              className="p-1 rounded hover:bg-gray-100 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                e.preventDefault()
+                                setSearchDestination("")
+                              }}
+                            >
+                              <X className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-pointer" />
+                            </button>
+                          )}
+                          <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+                        </div>
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Tìm kiếm tỉnh thành..." />
+                        <CommandList>
+                          <CommandEmpty>Không tìm thấy tỉnh thành.</CommandEmpty>
+                          <CommandGroup>
+                            {TINH_THANH.filter((tinh) => tinh !== searchOrigin).map((tinh) => (
+                              <CommandItem
+                                key={tinh}
+                                value={tinh}
+                                onSelect={() => {
+                                  setSearchDestination(tinh)
+                                  setOpenDestinationCombobox(false)
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    searchDestination === tinh ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {tinh}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
                 {/* Filter Buttons - Bo tròn */}

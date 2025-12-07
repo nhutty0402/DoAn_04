@@ -945,9 +945,9 @@ error.message ||
                               {req.ho_ten || `ID: ${req.nguoi_nhan_id}`}
                             </p>
                             <p className="text-sm text-muted-foreground">{req.email}</p>
-                            <p className="text-xs text-muted-foreground">
+                            {/* <p className="text-xs text-muted-foreground">
                               Trạng thái: {req.trang_thai}
-                            </p>
+                            </p> */}
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">

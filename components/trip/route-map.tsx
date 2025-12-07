@@ -97,6 +97,7 @@ export function RouteMap({ origin, destination, mapboxToken, travelMode = "drivi
             data: {
               type: "Feature",
               geometry: route.geometry,
+              properties: {},
             },
           })
 

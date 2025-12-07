@@ -344,16 +344,25 @@ export function ExpensesTab({ tripId }: ExpensesTabProps) {
   }, [tripId])
 
   const handleAddExpense = async (expenseData: any) => {
+    // ✅ Đóng modal trước
+    setShowAddModal(false)
+    
     // ✅ Gọi lại API chi phí và ngân sách sau khi thêm thành công
     try {
       await Promise.all([
         fetchExpenses(), // Refresh danh sách chi phí
         fetchBudget(),   // Refresh ngân sách (có thể đã thay đổi)
       ])
+      
+      // ✅ Tự động reload trang với tab expenses để hiển thị chi phí đã thêm
+      const currentUrl = window.location.href.split('?')[0]
+      window.location.href = `${currentUrl}?tab=expenses`
     } catch (error) {
       console.error("Lỗi khi refresh dữ liệu sau khi thêm chi phí:", error)
+      // Vẫn reload với tab expenses ngay cả khi có lỗi
+      const currentUrl = window.location.href.split('?')[0]
+      window.location.href = `${currentUrl}?tab=expenses`
     }
-    setShowAddModal(false)
   }
 
   const handleUpdateBudget = async () => {

@@ -6,9 +6,11 @@ import axios from "axios"
 import Cookies from "js-cookie"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Loader2, Plane, DollarSign, MapPin, TrendingUp, Calendar } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Loader2, Plane, DollarSign, MapPin, TrendingUp, Calendar, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "https://travel-planner-imdw.onrender.com"
 
@@ -27,12 +29,32 @@ interface ThongKeData {
   }
 }
 
+interface DiaDiem {
+  dia_diem_id: number
+  ten_dia_diem: string
+  chuyen_di_id: number
+  ten_chuyen_di: string
+  tao_luc: string
+}
+
+interface ChiPhiTheoChuyenDi {
+  chuyen_di_id: number
+  ten_chuyen_di: string
+  tong_chi_phi_da_dung: number
+}
+
 export default function StatisticsPage() {
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [thongKeData, setThongKeData] = useState<ThongKeData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showDiaDiemModal, setShowDiaDiemModal] = useState(false)
+  const [diaDiemList, setDiaDiemList] = useState<DiaDiem[]>([])
+  const [loadingDiaDiem, setLoadingDiaDiem] = useState(false)
+  const [showChiPhiModal, setShowChiPhiModal] = useState(false)
+  const [chiPhiTheoChuyenDi, setChiPhiTheoChuyenDi] = useState<ChiPhiTheoChuyenDi[]>([])
+  const [loadingChiPhi, setLoadingChiPhi] = useState(false)
 
   useEffect(() => {
     fetchThongKe()
@@ -103,6 +125,126 @@ export default function StatisticsPage() {
   const formatMonth = (month: string) => {
     const [year, monthNum] = month.split("-")
     return `${monthNum}/${year}`
+  }
+
+  // Hàm lấy danh sách điểm đến từ API
+  const fetchDiaDiemList = async () => {
+    setLoadingDiaDiem(true)
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        toast({
+          title: "Lỗi xác thực",
+          description: "Vui lòng đăng nhập để xem danh sách điểm đến",
+          variant: "destructive",
+        })
+        router.replace("/login")
+        return
+      }
+
+      const response = await axios.get(
+        `${BACKEND_URL}/api/taikhoan/thong-ke/ca-nhan`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      if (response.data?.data?.danh_sach_dia_diem) {
+        setDiaDiemList(response.data.data.danh_sach_dia_diem)
+        setShowDiaDiemModal(true)
+      } else {
+        toast({
+          title: "Thông báo",
+          description: "Không có dữ liệu điểm đến",
+        })
+      }
+    } catch (err: any) {
+      console.error("Lỗi khi lấy danh sách điểm đến:", err)
+      toast({
+        title: "Lỗi",
+        description: err.response?.data?.message || "Không thể tải danh sách điểm đến",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingDiaDiem(false)
+    }
+  }
+
+  // Format ngày tháng
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString)
+      return date.toLocaleDateString("vi-VN", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    } catch {
+      return dateString
+    }
+  }
+
+  // Hàm lấy danh sách chi phí theo chuyến đi từ API
+  const fetchChiPhiTheoChuyenDi = async (e?: React.MouseEvent) => {
+    e?.preventDefault()
+    e?.stopPropagation()
+    
+    console.log("🔵 Click vào chi phí - bắt đầu fetch")
+    setLoadingChiPhi(true)
+    setShowChiPhiModal(true) // Mở modal ngay để hiển thị loading
+    
+    try {
+      const token = Cookies.get("token")
+      if (!token || token === "null" || token === "undefined") {
+        toast({
+          title: "Lỗi xác thực",
+          description: "Vui lòng đăng nhập để xem danh sách chi phí",
+          variant: "destructive",
+        })
+        router.replace("/login")
+        return
+      }
+
+      console.log("🔵 Đang gọi API...")
+      const response = await axios.get(
+        `${BACKEND_URL}/api/taikhoan/thong-ke/ca-nhan`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      console.log("🔵 API Response:", response.data)
+
+      if (response.data?.data?.chi_phi_theo_chuyen_di) {
+        console.log("🔵 Có dữ liệu chi phí:", response.data.data.chi_phi_theo_chuyen_di)
+        setChiPhiTheoChuyenDi(response.data.data.chi_phi_theo_chuyen_di)
+      } else {
+        console.log("🔵 Không có dữ liệu chi_phi_theo_chuyen_di trong response")
+        setChiPhiTheoChuyenDi([])
+        toast({
+          title: "Thông báo",
+          description: "Không có dữ liệu chi phí",
+        })
+      }
+    } catch (err: any) {
+      console.error("❌ Lỗi khi lấy danh sách chi phí:", err)
+      setChiPhiTheoChuyenDi([])
+      toast({
+        title: "Lỗi",
+        description: err.response?.data?.message || "Không thể tải danh sách chi phí",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingChiPhi(false)
+    }
   }
 
   // Lấy tên trạng thái tiếng Việt
@@ -190,7 +332,15 @@ export default function StatisticsPage() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card 
+                className="cursor-pointer hover:bg-muted/50 transition-colors"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  fetchChiPhiTheoChuyenDi(e)
+                }}
+                title="Click để xem chi tiết chi phí theo chuyến đi"
+              >
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Tổng chi phí</CardTitle>
                   <DollarSign className="h-4 w-4 text-muted-foreground" />
@@ -198,10 +348,14 @@ export default function StatisticsPage() {
                 <CardContent>
                   <div className="text-2xl font-bold">{formatCurrency(thongKeData.tong_chi_phi)}</div>
                   <p className="text-xs text-muted-foreground mt-1">Tổng số tiền đã chi</p>
+                  <p className="text-xs text-primary mt-2 font-medium">Click để xem chi tiết</p>
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card 
+                className="cursor-pointer hover:bg-muted/50 transition-colors"
+                onClick={fetchDiaDiemList}
+              >
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Tổng điểm đến</CardTitle>
                   <MapPin className="h-4 w-4 text-muted-foreground" />
@@ -209,6 +363,7 @@ export default function StatisticsPage() {
                 <CardContent>
                   <div className="text-2xl font-bold">{thongKeData.tong_diem_den}</div>
                   <p className="text-xs text-muted-foreground mt-1">Điểm đến đã đến</p>
+                  <p className="text-xs text-primary mt-2 font-medium">Click để xem chi tiết</p>
                 </CardContent>
               </Card>
             </div>
@@ -302,7 +457,15 @@ export default function StatisticsPage() {
                             </div>
 
                             {/* Chi phí */}
-                            <div>
+                            <div 
+                              className="cursor-pointer hover:bg-muted/50 p-2 rounded-lg transition-colors"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                fetchChiPhiTheoChuyenDi(e)
+                              }}
+                              title="Click để xem chi tiết chi phí theo chuyến đi"
+                            >
                               <div className="flex items-center justify-between mb-1">
                                 <span className="text-sm text-muted-foreground flex items-center gap-2">
                                   <DollarSign className="h-3 w-3" />
@@ -316,6 +479,7 @@ export default function StatisticsPage() {
                                   style={{ width: `${chiPhiPercent}%` }}
                                 />
                               </div>
+                              <p className="text-xs text-primary mt-1 font-medium">Click để xem chi tiết</p>
                             </div>
                           </div>
                         </div>
@@ -324,18 +488,135 @@ export default function StatisticsPage() {
                   </div>
                 </CardContent>
               </Card>
-            )}
-
-            {/* Thông báo nếu không có dữ liệu */}
-            {(!thongKeData.bieu_do_theo_thang || thongKeData.bieu_do_theo_thang.length === 0) && (
-              <Card>
-                <CardContent className="p-8 text-center">
-                  <p className="text-muted-foreground">Chưa có dữ liệu hoạt động trong 12 tháng gần nhất</p>
-                </CardContent>
-              </Card>
-            )}
+            )}           
           </div>
         )}
+
+        {/* Dialog hiển thị danh sách điểm đến */}
+        <Dialog open={showDiaDiemModal} onOpenChange={setShowDiaDiemModal}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Danh sách điểm đến đã đến ({diaDiemList.length})
+              </DialogTitle>
+              <DialogDescription>
+                Các điểm đến mà bạn đã tham quan trong các chuyến đi
+              </DialogDescription>
+            </DialogHeader>
+            
+            {loadingDiaDiem ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <span className="ml-2 text-muted-foreground">Đang tải danh sách...</span>
+              </div>
+            ) : diaDiemList.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <MapPin className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Chưa có điểm đến nào</p>
+              </div>
+            ) : (
+              <div className="space-y-3 mt-4">
+                {diaDiemList.map((diaDiem) => (
+                  <Card key={diaDiem.dia_diem_id} className="hover:bg-muted/50 transition-colors">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <MapPin className="h-4 w-4 text-primary" />
+                            <h3 className="font-semibold text-lg">{diaDiem.ten_dia_diem}</h3>
+                          </div>
+                          <div className="space-y-1 text-sm text-muted-foreground">
+                            <p className="flex items-center gap-2">
+                              <Plane className="h-3 w-3" />
+                              <span>Chuyến đi: <span className="font-medium text-foreground">{diaDiem.ten_chuyen_di}</span></span>
+                            </p>
+                            <p className="flex items-center gap-2">
+                              <Calendar className="h-3 w-3" />
+                              <span>Tạo lúc: <span className="font-medium text-foreground">{formatDate(diaDiem.tao_luc)}</span></span>
+                            </p>
+                          </div>
+                        </div>
+                        {/* <Badge variant="secondary" className="ml-auto">
+                          ID: {diaDiem.dia_diem_id}
+                        </Badge> */}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog hiển thị danh sách chi phí theo chuyến đi */}
+        <Dialog open={showChiPhiModal} onOpenChange={setShowChiPhiModal}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5" />
+                Chi phí theo chuyến đi ({chiPhiTheoChuyenDi.length})
+              </DialogTitle>
+              <DialogDescription>
+                Tổng chi phí đã sử dụng trong từng chuyến đi của bạn
+              </DialogDescription>
+            </DialogHeader>
+            
+            {loadingChiPhi ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <span className="ml-2 text-muted-foreground">Đang tải danh sách...</span>
+              </div>
+            ) : chiPhiTheoChuyenDi.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Chưa có dữ liệu chi phí</p>
+              </div>
+            ) : (
+              <div className="space-y-3 mt-4">
+                {chiPhiTheoChuyenDi.map((chiPhi) => (
+                  <Card key={chiPhi.chuyen_di_id} className="hover:bg-muted/50 transition-colors">
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Plane className="h-4 w-4 text-primary" />
+                            <h3 className="font-semibold text-lg">{chiPhi.ten_chuyen_di}</h3>
+                          </div>
+                          <div className="flex items-center gap-2 mt-3">
+                            <DollarSign className="h-4 w-4 text-green-600" />
+                            <span className="text-sm text-muted-foreground">Tổng chi phí đã dùng:</span>
+                            <span className="text-lg font-bold text-green-600">
+                              {formatCurrency(chiPhi.tong_chi_phi_da_dung)}
+                            </span>
+                          </div>
+                        </div>
+                        {/* <Badge variant="secondary" className="ml-auto">
+                          ID: {chiPhi.chuyen_di_id}
+                        </Badge> */}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+                {/* Tổng chi phí */}
+                {chiPhiTheoChuyenDi.length > 0 && (
+                  <Card className="border-primary/50 bg-primary/5">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-lg">Tổng cộng:</span>
+                        <span className="text-2xl font-bold text-primary">
+                          {formatCurrency(
+                            chiPhiTheoChuyenDi.reduce((sum, cp) => sum + cp.tong_chi_phi_da_dung, 0)
+                          )}
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   )

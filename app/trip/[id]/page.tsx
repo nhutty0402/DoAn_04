@@ -45,7 +45,18 @@ interface TienDo {
 
 export default function TripDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const router = useRouter()
-    const [activeTab, setActiveTab] = useState("overview")
+    
+    // ✅ Đọc tab từ URL query parameter
+    const getInitialTab = () => {
+        if (typeof window !== "undefined") {
+            const urlParams = new URLSearchParams(window.location.search)
+            const tab = urlParams.get("tab")
+            if (tab) return tab
+        }
+        return "overview"
+    }
+    
+    const [activeTab, setActiveTab] = useState(getInitialTab())
     const [trip, setTrip] = useState<Trip | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -309,8 +320,8 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
                                         {/* <Users className="h-4 w-4 text-primary" /> */}
                                         <MapPin className="h-4 w-4 text-primary" />
                                         <div>
-                                            <p className="text-sm text-muted-foreground">Địa điểm đến</p>
-                                            <p className="font-semibold">{trip.dia_diem_den || "Chưa cập nhật"}</p>
+                                            <p className="text-sm text-muted-foreground">Địa điểm xuất phát đầu tiên</p>
+                                            <p className="font-semibold">{trip.dia_diem_xuat_phat || "Chưa cập nhật"}</p>
                                         </div>
                                     </div>
                                     {/* <div>
@@ -403,14 +414,19 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
                             <MapPin className="h-4 w-4" />
                             <span className="hidden sm:inline">Tổng quan</span>
                         </TabsTrigger>
-                        <TabsTrigger value="itinerary" className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4" />
-                            <span className="hidden sm:inline">Lịch trình</span>
-                        </TabsTrigger>
                         <TabsTrigger value="members" className="flex items-center gap-2">
                             <Users className="h-4 w-4" />
                             <span className="hidden sm:inline">Thành viên</span>
                         </TabsTrigger>
+                        <TabsTrigger value="planning" className="flex items-center gap-2">
+                            <ClipboardList className="h-4 w-4" />
+                            <span className="hidden sm:inline">Kế hoạch</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="itinerary" className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4" />
+                            <span className="hidden sm:inline">Lịch trình</span>
+                        </TabsTrigger>
+                      
                         <TabsTrigger value="expenses" className="flex items-center gap-2">
                             <DollarSign className="h-4 w-4" />
                             <span className="hidden sm:inline">Chi phí</span>
@@ -427,10 +443,7 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
                             <Sparkles className="h-4 w-4" />
                             <span className="hidden sm:inline">Gợi ý thông minh</span>
                         </TabsTrigger>
-                        <TabsTrigger value="planning" className="flex items-center gap-2">
-                            <ClipboardList className="h-4 w-4" />
-                            <span className="hidden sm:inline">Kế hoạch</span>
-                        </TabsTrigger>
+                        
                         {/* <TabsTrigger value="settings" className="flex items-center gap-2">
                             <Settings className="h-4 w-4" />
                             <span className="hidden sm:inline">Cài đặt</span>

@@ -1342,14 +1342,14 @@ export function ItineraryTab({ tripId, tripStartDate, tripEndDate }: ItineraryTa
                                     )}
                                   </div>
                                    {/* CHỈNH SỬA */}
-                                   <Button
+                                   {/* <Button
                                      variant="ghost"
                                      size="icon"
                                      className="text-muted-foreground hover:text-primary"
                                      onClick={() => setEditingPoi({ poi: lichTrinh, dayId: day.id })}
                                    >
                                      <Pencil className="h-4 w-4" />
-                                   </Button>
+                                   </Button> */}
                                   {/* Xóa lịch trình */}
 
                                   <Button
