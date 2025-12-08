@@ -27,7 +27,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Plus, MapPin, Calendar, DollarSign, Clock, ChevronRight, ChevronLeft, FileDown, Loader2, MoreVertical, Pencil, Trash2, AlertTriangle, GitCompare } from "lucide-react"
+import { Plus, MapPin, Calendar, DollarSign, Clock, ChevronRight, ChevronLeft, FileDown, Loader2, MoreVertical, Pencil, Trash2, AlertTriangle, GitCompare, Save } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import jsPDF from "jspdf"
@@ -198,6 +198,9 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
   const [isLoadingCompare, setIsLoadingCompare] = useState(false)
   const [compareData, setCompareData] = useState<any>(null)
 
+  // State cho lưu kế hoạch gốc
+  const [isSavingOriginalPlan, setIsSavingOriginalPlan] = useState(false)
+
   // Hàm chuyển đổi tên trường sang tiếng Việt
   const getFieldLabel = (key: string): string => {
     const fieldLabels: { [key: string]: string } = {
@@ -237,6 +240,86 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
     }
     
     return String(value)
+  }
+
+  // Function lưu kế hoạch gốc
+  const handleSaveOriginalPlan = async () => {
+    setIsSavingOriginalPlan(true)
+    try {
+      const token = Cookies.get("token")
+      
+      if (!token || token === "null" || token === "undefined") {
+        toast({
+          title: "Lỗi xác thực",
+          description: "Vui lòng đăng nhập để sử dụng tính năng này",
+          variant: "destructive",
+        })
+        setIsSavingOriginalPlan(false)
+        return
+      }
+
+      const response = await axios.post(
+        `${BACKEND_URL}/api/ke-hoach-chuyen-di/${tripId}/luu-ke-hoach-goc`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      console.log("✅ API Response (Lưu kế hoạch gốc):", response.data)
+      
+      toast({
+        title: "Lưu kế hoạch gốc thành công",
+        description: response.data?.message || `Đã lưu ${response.data?.summary?.so_diem_den || 0} điểm đến, ${response.data?.summary?.so_lich_trinh || 0} lịch trình, ${response.data?.summary?.so_chi_phi || 0} chi phí`,
+      })
+    } catch (error: any) {
+      console.error("❌ Lỗi khi lưu kế hoạch gốc:", error)
+      
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          toast({
+            title: "Lỗi xác thực",
+            description: "Phiên đăng nhập đã hết hạn",
+            variant: "destructive",
+          })
+        } else if (error.response?.status === 403) {
+          toast({
+            title: "Không có quyền",
+            description: "Chỉ chủ chuyến đi mới được lưu kế hoạch gốc",
+            variant: "destructive",
+          })
+        } else if (error.response?.status === 404) {
+          toast({
+            title: "Không tìm thấy",
+            description: "Không tìm thấy chuyến đi hoặc kế hoạch",
+            variant: "destructive",
+          })
+        } else if (error.response?.status === 409) {
+          toast({
+            title: "Đã tồn tại",
+            description: error.response?.data?.message || "Kế hoạch gốc đã được lưu trước đó",
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "Lỗi",
+            description: error.response?.data?.message || "Không thể lưu kế hoạch gốc",
+            variant: "destructive",
+          })
+        }
+      } else {
+        toast({
+          title: "Lỗi",
+          description: "Có lỗi xảy ra khi lưu kế hoạch gốc",
+          variant: "destructive",
+        })
+      }
+    } finally {
+      setIsSavingOriginalPlan(false)
+    }
   }
 
   // Function so sánh kế hoạch
@@ -2371,10 +2454,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
               </>
             )}
           </Button>
-          <Button onClick={() => setShowAddPlanModal(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Thêm kế hoạch
-        </Button>
+         
           <Button 
             onClick={handleComparePlan}
             disabled={isLoadingCompare}
@@ -2393,6 +2473,24 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
               </>
             )}
           </Button>
+          <Button 
+          onClick={handleSaveOriginalPlan}
+          disabled={isSavingOriginalPlan}
+          variant="outline"
+          className="border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10 hover:from-primary/10 hover:to-primary/15 text-primary hover:text-primary/90 hover:border-primary/30 transition-all duration-200 shadow-sm hover:shadow-md"
+        >
+          {isSavingOriginalPlan ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Đang lưu...
+            </>
+          ) : (
+            <>
+              <Save className="h-4 w-4 mr-2" />
+              Lưu kế hoạch gốc
+            </>
+          )}
+        </Button>
         <Button onClick={() => setShowAddPlanModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Thêm kế hoạch
