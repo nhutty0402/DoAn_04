@@ -11,7 +11,23 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Separator } from "@/components/ui/separator"
-import { Plus, MapPin, Calendar, DollarSign, Clock, ChevronRight, ChevronLeft, FileDown, Loader2 } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Plus, MapPin, Calendar, DollarSign, Clock, ChevronRight, ChevronLeft, FileDown, Loader2, MoreVertical, Pencil, Trash2, AlertTriangle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import jsPDF from "jspdf"
@@ -125,12 +141,58 @@ const TINH_THANH = [
 
 export function PlanningTab({ tripId }: PlanningTabProps) {
   const { toast } = useToast()
-  
+
   // States
   const [isExportingPDF, setIsExportingPDF] = useState(false)
   const [isSavingDiemDen, setIsSavingDiemDen] = useState(false)
+  const [isSavingLichTrinh, setIsSavingLichTrinh] = useState(false)
+  const [isSavingChiPhi, setIsSavingChiPhi] = useState(false)
+  const [isUpdatingDiemDen, setIsUpdatingDiemDen] = useState(false)
+  const [isUpdatingLichTrinh, setIsUpdatingLichTrinh] = useState(false)
+  const [isUpdatingChiPhi, setIsUpdatingChiPhi] = useState(false)
+  const [isDeletingDiemDen, setIsDeletingDiemDen] = useState(false)
   const pdfContentRef = useRef<HTMLDivElement>(null)
   
+  // State cho dialog xác nhận xóa điểm đến
+  const [showDeleteDiemDenDialog, setShowDeleteDiemDenDialog] = useState(false)
+  const [deletingDiemDen, setDeletingDiemDen] = useState<DiemDen | null>(null)
+
+  // State cho modal chỉnh sửa điểm đến
+  const [showEditDiemDenModal, setShowEditDiemDenModal] = useState(false)
+  const [editingDiemDen, setEditingDiemDen] = useState<DiemDen | null>(null)
+  const [editDiemDenForm, setEditDiemDenForm] = useState({
+    ten_diem_den: "",
+    ngay_bat_dau: "",
+    ngay_ket_thuc: "",
+    ghi_chu: ""
+  })
+
+  // State cho modal chỉnh sửa lịch trình
+  const [showEditLichTrinhModal, setShowEditLichTrinhModal] = useState(false)
+  const [editingLichTrinh, setEditingLichTrinh] = useState<LichTrinh | null>(null)
+  const [editLichTrinhForm, setEditLichTrinhForm] = useState({
+    diem_den_id: 0,
+    ngay: "",
+    tieu_de: "",
+    ghi_chu: "",
+    gio_bat_dau: "",
+    gio_ket_thuc: ""
+  })
+
+  // State cho modal chỉnh sửa chi phí
+  const [showEditChiPhiModal, setShowEditChiPhiModal] = useState(false)
+  const [editingChiPhi, setEditingChiPhi] = useState<ChiPhi | null>(null)
+  const [editChiPhiForm, setEditChiPhiForm] = useState({
+    diem_den_id: 0,
+    lich_trinh_id: 0,
+    nguoi_chi_id: 0,
+    nguoi_chi_ten: "",
+    so_tien: 0,
+    mo_ta: "",
+    nhom: "",
+    ngay: ""
+  })
+
   // Mock data mẫu (fallback)
   const mockDiemDen: DiemDen[] = [
     {
@@ -295,18 +357,18 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
   const [diemDenList, setDiemDenList] = useState<DiemDen[]>([])
   const [lichTrinhList, setLichTrinhList] = useState<LichTrinh[]>([])
   const [chiPhiList, setChiPhiList] = useState<ChiPhi[]>([])
-  
+
   // Modal state
   const [showAddPlanModal, setShowAddPlanModal] = useState(false)
   const [activeTab, setActiveTab] = useState("diem-den")
-  
+
   // Trip info để lấy dia_diem_xuat_phat và ngày bắt đầu/kết thúc
   const [tripInfo, setTripInfo] = useState<{
     dia_diem_xuat_phat?: string
     ngay_bat_dau?: string
     ngay_ket_thuc?: string
   } | null>(null)
-  
+
   // Fetch trip info từ database
   useEffect(() => {
     const fetchTripInfo = async () => {
@@ -339,7 +401,111 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
 
     fetchTripInfo()
   }, [tripId])
-  
+
+  // Fetch kế hoạch chuyến đi từ database
+  useEffect(() => {
+    const fetchKeHoach = async () => {
+      try {
+        const token = Cookies.get("token")
+        if (!token) return
+
+        const response = await axios.get(
+          `${BACKEND_URL}/api/ke-hoach-chuyen-di/${tripId}/ke-hoach`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        )
+
+        console.log("✅ API Response (Get Ke Hoach):", response.data)
+
+        const data = response.data
+        const diemDenArray = data?.diem_den || []
+        const lichTrinhArray = data?.lich_trinh || []
+
+        // Map điểm đến từ API
+        const mappedDiemDen: DiemDen[] = diemDenArray.map((dd: any) => ({
+          diem_den_id: dd.diem_den_id,
+          ten_diem_den: dd.ten_diem_den || "",
+          thu_tu: dd.thu_tu || 0,
+          ngay_bat_dau: dd.ngay_bat_dau || "",
+          ngay_ket_thuc: dd.ngay_ket_thuc || "",
+          dia_diem_xuat_phat: dd.dia_diem_xuat_phat || "",
+          ghi_chu: dd.ghi_chu || "",
+        }))
+
+        // Map lịch trình từ API
+        const mappedLichTrinh: LichTrinh[] = lichTrinhArray.map((lt: any) => ({
+          lich_trinh_id: lt.lich_trinh_ngay_id || lt.lich_trinh_id,
+          diem_den_id: lt.diem_den_id || 0,
+          ngay: lt.ngay || "",
+          tieu_de: lt.tieu_de || "",
+          ghi_chu: lt.ghi_chu || "",
+          gio_bat_dau: lt.gio_bat_dau || "",
+          gio_ket_thuc: lt.gio_ket_thuc || "",
+        }))
+
+        // Map chi phí từ API (từ diem_den.chi_phi)
+        // Và liên kết với lịch trình qua ngày
+        const mappedChiPhi: ChiPhi[] = []
+        diemDenArray.forEach((dd: any) => {
+          if (dd.chi_phi && Array.isArray(dd.chi_phi)) {
+            dd.chi_phi.forEach((cp: any) => {
+              // Tìm lịch trình có cùng ngày và cùng điểm đến
+              const linkedLichTrinh = lichTrinhArray.find(
+                (lt: any) =>
+                  lt.diem_den_id === cp.diem_den_id &&
+                  lt.ngay === cp.ngay
+              )
+
+              mappedChiPhi.push({
+                chi_phi_id: cp.chi_phi_id,
+                diem_den_id: cp.diem_den_id || dd.diem_den_id,
+                lich_trinh_id: linkedLichTrinh
+                  ? (linkedLichTrinh.lich_trinh_ngay_id || linkedLichTrinh.lich_trinh_id)
+                  : undefined,
+                nguoi_chi_id: cp.nguoi_chi_id || 0,
+                nguoi_chi_ten: cp.nguoi_chi_ten || "",
+                so_tien: parseFloat(cp.so_tien) || 0,
+                mo_ta: cp.mo_ta || "",
+                nhom: cp.nhom || "",
+                // Ngày chi phí: ưu tiên lấy từ lịch trình nếu có liên kết, nếu không thì lấy từ chi phí
+                ngay: linkedLichTrinh
+                  ? (linkedLichTrinh.ngay || cp.ngay || "")
+                  : (cp.ngay || ""),
+              })
+            })
+          }
+        })
+
+        // Cập nhật state
+        setDiemDenList(mappedDiemDen)
+        setLichTrinhList(mappedLichTrinh)
+        setChiPhiList(mappedChiPhi)
+
+        // Cập nhật counter để tránh trùng ID
+        if (mappedDiemDen.length > 0) {
+          const maxDiemDenId = Math.max(...mappedDiemDen.map(dd => dd.diem_den_id))
+          setDiemDenIdCounter(maxDiemDenId + 1)
+        }
+        if (mappedLichTrinh.length > 0) {
+          const maxLichTrinhId = Math.max(...mappedLichTrinh.map(lt => lt.lich_trinh_id))
+          setLichTrinhIdCounter(maxLichTrinhId + 1)
+        }
+        if (mappedChiPhi.length > 0) {
+          const maxChiPhiId = Math.max(...mappedChiPhi.map(cp => cp.chi_phi_id))
+          setChiPhiIdCounter(maxChiPhiId + 1)
+        }
+      } catch (error) {
+        console.error("Lỗi khi lấy kế hoạch chuyến đi:", error)
+      }
+    }
+
+    fetchKeHoach()
+  }, [tripId])
+
   // Owner info để lấy tên người chi (frontend only)
   const [tripOwner] = useState<{
     nguoi_dung_id?: number
@@ -348,7 +514,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
     nguoi_dung_id: 1,
     ho_ten: "Người dùng"
   })
-  
+
   // Danh sách loại chi phí (giống form Thêm Chi Phí)
   const expenseTypes = [
     { value: "ăn uống", label: "Ăn uống" },
@@ -360,7 +526,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
     { value: "dịch vụ", label: "Dịch vụ" },
     { value: "khác", label: "Khác" },
   ]
-  
+
   // Form states
   const [diemDenForm, setDiemDenForm] = useState({
     ten_diem_den: "",
@@ -370,7 +536,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
     dia_diem_xuat_phat: "",
     ghi_chu: ""
   })
-  
+
   const [lichTrinhForm, setLichTrinhForm] = useState({
     diem_den_id: 0,
     ngay: "",
@@ -379,7 +545,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
     gio_bat_dau: "",
     gio_ket_thuc: ""
   })
-  
+
   const [chiPhiForm, setChiPhiForm] = useState({
     diem_den_id: 0,
     lich_trinh_id: 0, // Thêm trường chọn lịch trình
@@ -394,21 +560,21 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
   // Hàm tạo danh sách ngày từ ngày bắt đầu đến ngày kết thúc
   const generateDateList = (startDate: string, endDate: string): string[] => {
     if (!startDate || !endDate) return []
-    
+
     const start = new Date(startDate)
     const end = new Date(endDate)
-    
+
     if (isNaN(start.getTime()) || isNaN(end.getTime())) return []
     if (start > end) return []
-    
+
     const dates: string[] = []
     const currentDate = new Date(start)
-    
+
     while (currentDate <= end) {
       dates.push(currentDate.toISOString().split('T')[0])
       currentDate.setDate(currentDate.getDate() + 1)
     }
-    
+
     return dates
   }
 
@@ -419,18 +585,18 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
   const formatCurrency = (amount: number | string): string => {
     const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount
     if (isNaN(numAmount) || numAmount === 0) return "0"
-    
+
     // Làm tròn về số nguyên (không có phần thập phân)
     const roundedAmount = Math.round(numAmount)
-    
+
     // Chuyển sang string và format với dấu chấm làm phân cách hàng nghìn
     // Ví dụ: 200000 -> "200.000", 2000000 -> "2.000.000"
     const amountStr = roundedAmount.toString()
-    
+
     // Format với regex: thêm dấu chấm sau mỗi 3 chữ số từ phải sang trái
     return amountStr.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
   }
-  
+
   // ID counters - tạm thời cho frontend
   const [diemDenIdCounter, setDiemDenIdCounter] = useState(1)
   const [lichTrinhIdCounter, setLichTrinhIdCounter] = useState(1)
@@ -442,7 +608,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
       const autoDiaDiemXuatPhat = diemDenList.length === 0
         ? tripInfo?.dia_diem_xuat_phat || ""
         : diemDenList[diemDenList.length - 1]?.ten_diem_den || ""
-      
+
       // Chỉ cập nhật nếu dia_diem_xuat_phat chưa có giá trị hoặc đang rỗng
       // Điều này đảm bảo không ghi đè dữ liệu người dùng đã nhập khi chuyển tab
       if (autoDiaDiemXuatPhat && !diemDenForm.dia_diem_xuat_phat) {
@@ -568,7 +734,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
 
     // Tự động điền địa điểm xuất phát nếu chưa có
     let diaDiemXuatPhat = diemDenForm.dia_diem_xuat_phat
-    
+
     if (!diaDiemXuatPhat) {
       // Nếu là điểm đến đầu tiên, lấy từ chuyến đi
       if (diemDenList.length === 0) {
@@ -592,7 +758,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
 
     setDiemDenList([...diemDenList, newDiemDen])
     setDiemDenIdCounter(diemDenIdCounter + 1)
-    
+
     toast({
       title: "Thành công",
       description: "Đã thêm điểm đến",
@@ -609,7 +775,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
       dia_diem_xuat_phat: nextDiaDiemXuatPhat, // Tự động điền điểm đến vừa thêm
       ghi_chu: ""
     })
-    
+
     // Trả về true để báo submit thành công
     return true
   }
@@ -651,6 +817,526 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
       const errorMessage = error.response?.data?.message || error.message || "Có lỗi xảy ra khi lưu điểm đến"
       return { success: false, error: errorMessage }
     }
+  }
+
+  // Hàm lưu lịch trình vào API
+  const saveLichTrinhToAPI = async (lichTrinhData: {
+    diem_den_id: number
+    ngay: string
+    tieu_de: string
+    gio_bat_dau: string
+    gio_ket_thuc: string
+    ghi_chu: string
+  }): Promise<{ success: boolean; lich_trinh?: any; error?: string }> => {
+    try {
+      const token = Cookies.get("token")
+      if (!token) {
+        return { success: false, error: "Không tìm thấy token xác thực" }
+      }
+
+      const response = await axios.post(
+        `${BACKEND_URL}/api/ke-hoach-chuyen-di/${tripId}/them-lich-trinh`,
+        {
+          diem_den_id: lichTrinhData.diem_den_id,
+          ngay: lichTrinhData.ngay || null,
+          tieu_de: lichTrinhData.tieu_de || null,
+          gio_bat_dau: lichTrinhData.gio_bat_dau || null,
+          gio_ket_thuc: lichTrinhData.gio_ket_thuc || null,
+          ghi_chu: lichTrinhData.ghi_chu || null,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      return { success: true, lich_trinh: response.data.lich_trinh }
+    } catch (error: any) {
+      console.error("Lỗi khi lưu lịch trình:", error)
+      const errorMessage = error.response?.data?.message || error.message || "Có lỗi xảy ra khi lưu lịch trình"
+      return { success: false, error: errorMessage }
+    }
+  }
+
+  // API call để cập nhật lịch trình
+  const updateLichTrinhToAPI = async (lichTrinhNgayId: number, lichTrinhData: {
+    ngay: string
+    tieu_de: string
+    ghi_chu: string
+    gio_bat_dau: string
+    gio_ket_thuc: string
+  }): Promise<{ success: boolean; lich_trinh?: any; error?: string }> => {
+    try {
+      const token = Cookies.get("token")
+      if (!token) {
+        return { success: false, error: "Không tìm thấy token xác thực" }
+      }
+
+      const response = await axios.put(
+        `${BACKEND_URL}/api/ke-hoach-chuyen-di/${tripId}/lich-trinh/${lichTrinhNgayId}`,
+        {
+          ngay: lichTrinhData.ngay || "",
+          tieu_de: lichTrinhData.tieu_de || "",
+          ghi_chu: lichTrinhData.ghi_chu || "",
+          gio_bat_dau: lichTrinhData.gio_bat_dau || "",
+          gio_ket_thuc: lichTrinhData.gio_ket_thuc || "",
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      return { success: true, lich_trinh: response.data.lich_trinh }
+    } catch (error: any) {
+      console.error("Lỗi khi cập nhật lịch trình:", error)
+      const errorMessage = error.response?.data?.message || error.message || "Có lỗi xảy ra khi cập nhật lịch trình"
+      return { success: false, error: errorMessage }
+    }
+  }
+
+  // Hàm lưu chi phí vào API
+  const saveChiPhiToAPI = async (chiPhiData: {
+    diem_den_id: number
+    so_tien: number
+    mo_ta: string
+    nhom: string
+    ngay: string
+  }): Promise<{ success: boolean; chi_phi?: any; error?: string }> => {
+    try {
+      const token = Cookies.get("token")
+      if (!token) {
+        return { success: false, error: "Không tìm thấy token xác thực" }
+      }
+
+      const response = await axios.post(
+        `${BACKEND_URL}/api/ke-hoach-chuyen-di/${tripId}/them-chi-phi`,
+        {
+          diem_den_id: chiPhiData.diem_den_id,
+          so_tien: chiPhiData.so_tien || null,
+          mo_ta: chiPhiData.mo_ta || null,
+          nhom: chiPhiData.nhom || null,
+          ngay: chiPhiData.ngay || null,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      return { success: true, chi_phi: response.data.chi_phi }
+    } catch (error: any) {
+      console.error("Lỗi khi lưu chi phí:", error)
+      const errorMessage = error.response?.data?.message || error.message || "Có lỗi xảy ra khi lưu chi phí"
+      return { success: false, error: errorMessage }
+    }
+  }
+
+  // API call để cập nhật chi phí
+  const updateChiPhiToAPI = async (chiPhiId: number, chiPhiData: {
+    diem_den_id: number
+    so_tien: number
+    mo_ta: string
+    nhom: string
+    ngay: string
+  }): Promise<{ success: boolean; chi_phi?: any; error?: string }> => {
+    try {
+      const token = Cookies.get("token")
+      if (!token) {
+        return { success: false, error: "Không tìm thấy token xác thực" }
+      }
+
+      const response = await axios.put(
+        `${BACKEND_URL}/api/ke-hoach-chuyen-di/${tripId}/chi-phi/${chiPhiId}`,
+        {
+          diem_den_id: chiPhiData.diem_den_id,
+          so_tien: chiPhiData.so_tien,
+          mo_ta: chiPhiData.mo_ta || "",
+          nhom: chiPhiData.nhom || "",
+          ngay: chiPhiData.ngay || "",
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      return { success: true, chi_phi: response.data.chi_phi }
+    } catch (error: any) {
+      console.error("Lỗi khi cập nhật chi phí:", error)
+      const errorMessage = error.response?.data?.message || error.message || "Có lỗi xảy ra khi cập nhật chi phí"
+      return { success: false, error: errorMessage }
+    }
+  }
+
+  // API call để xóa điểm đến
+  const deleteDiemDenToAPI = async (diemDenId: number): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const token = Cookies.get("token")
+      if (!token) {
+        return { success: false, error: "Không tìm thấy token xác thực" }
+      }
+
+      const response = await axios.delete(
+        `${BACKEND_URL}/api/ke-hoach-chuyen-di/${tripId}/diem-den/${diemDenId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      return { success: true }
+    } catch (error: any) {
+      console.error("Lỗi khi xóa điểm đến:", error)
+      const errorMessage = error.response?.data?.message || error.message || "Có lỗi xảy ra khi xóa điểm đến"
+      return { success: false, error: errorMessage }
+    }
+  }
+
+  // Hàm xử lý xóa điểm đến
+  const handleDeleteDiemDen = async () => {
+    if (!deletingDiemDen) return false
+
+    setIsDeletingDiemDen(true)
+    const apiResult = await deleteDiemDenToAPI(deletingDiemDen.diem_den_id)
+    setIsDeletingDiemDen(false)
+
+    if (!apiResult.success) {
+      toast({
+        title: "Lỗi",
+        description: apiResult.error || "Không thể xóa điểm đến. Vui lòng thử lại.",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    // Xóa điểm đến khỏi state
+    setDiemDenList(prevList => prevList.filter(dd => dd.diem_den_id !== deletingDiemDen.diem_den_id))
+    
+    // Xóa các lịch trình và chi phí liên quan
+    setLichTrinhList(prevList => prevList.filter(lt => lt.diem_den_id !== deletingDiemDen.diem_den_id))
+    setChiPhiList(prevList => prevList.filter(cp => cp.diem_den_id !== deletingDiemDen.diem_den_id))
+
+    toast({
+      title: "Thành công",
+      description: "Đã xóa điểm đến",
+    })
+
+    setShowDeleteDiemDenDialog(false)
+    setDeletingDiemDen(null)
+
+    return true
+  }
+
+  // API call để cập nhật điểm đến
+  const updateDiemDenToAPI = async (diemDenId: number, diemDenData: {
+    ten_diem_den: string
+    ngay_bat_dau: string
+    ngay_ket_thuc: string
+    ghi_chu: string
+  }): Promise<{ success: boolean; diem_den?: any; error?: string }> => {
+    try {
+      const token = Cookies.get("token")
+      if (!token) {
+        return { success: false, error: "Không tìm thấy token xác thực" }
+      }
+
+      const response = await axios.put(
+        `${BACKEND_URL}/api/ke-hoach-chuyen-di/${tripId}/diem-den/${diemDenId}`,
+        {
+          ten_diem_den: diemDenData.ten_diem_den || "",
+          ngay_bat_dau: diemDenData.ngay_bat_dau || "",
+          ngay_ket_thuc: diemDenData.ngay_ket_thuc || "",
+          ghi_chu: diemDenData.ghi_chu || "",
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      return { success: true, diem_den: response.data.diem_den }
+    } catch (error: any) {
+      console.error("Lỗi khi cập nhật điểm đến:", error)
+      const errorMessage = error.response?.data?.message || error.message || "Có lỗi xảy ra khi cập nhật điểm đến"
+      return { success: false, error: errorMessage }
+    }
+  }
+
+  // Hàm mở modal chỉnh sửa điểm đến
+  const handleOpenEditDiemDen = (diemDen: DiemDen) => {
+    setEditingDiemDen(diemDen)
+    setEditDiemDenForm({
+      ten_diem_den: diemDen.ten_diem_den,
+      ngay_bat_dau: diemDen.ngay_bat_dau,
+      ngay_ket_thuc: diemDen.ngay_ket_thuc,
+      ghi_chu: diemDen.ghi_chu
+    })
+    setShowEditDiemDenModal(true)
+  }
+
+  // Hàm mở modal chỉnh sửa lịch trình
+  const handleOpenEditLichTrinh = (diemDen: DiemDen) => {
+    setShowEditLichTrinhModal(true)
+  }
+
+  // Hàm xử lý cập nhật lịch trình
+  const handleUpdateLichTrinh = async () => {
+    if (!editingLichTrinh) return false
+
+    if (!editLichTrinhForm.tieu_de.trim()) {
+      toast({
+        title: "Lỗi",
+        description: "Vui lòng nhập tiêu đề",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    if (!editLichTrinhForm.ngay) {
+      toast({
+        title: "Lỗi",
+        description: "Vui lòng chọn ngày",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    // Lấy lich_trinh_ngay_id từ editingLichTrinh
+    // Nếu không có, sử dụng lich_trinh_id
+    const lichTrinhNgayId = (editingLichTrinh as any).lich_trinh_ngay_id || editingLichTrinh.lich_trinh_id
+
+    setIsUpdatingLichTrinh(true)
+    const apiResult = await updateLichTrinhToAPI(lichTrinhNgayId, {
+      ngay: editLichTrinhForm.ngay,
+      tieu_de: editLichTrinhForm.tieu_de.trim(),
+      ghi_chu: editLichTrinhForm.ghi_chu,
+      gio_bat_dau: editLichTrinhForm.gio_bat_dau,
+      gio_ket_thuc: editLichTrinhForm.gio_ket_thuc,
+    })
+    setIsUpdatingLichTrinh(false)
+
+    if (!apiResult.success) {
+      toast({
+        title: "Lỗi",
+        description: apiResult.error || "Không thể cập nhật lịch trình. Vui lòng thử lại.",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    // Cập nhật state
+    const updatedLichTrinh = apiResult.lich_trinh
+    setLichTrinhList(prevList =>
+      prevList.map(lt =>
+        lt.lich_trinh_id === editingLichTrinh.lich_trinh_id
+          ? {
+              ...lt,
+              ngay: updatedLichTrinh?.ngay || editLichTrinhForm.ngay,
+              tieu_de: updatedLichTrinh?.tieu_de || editLichTrinhForm.tieu_de.trim(),
+              ghi_chu: updatedLichTrinh?.ghi_chu || editLichTrinhForm.ghi_chu,
+              gio_bat_dau: updatedLichTrinh?.gio_bat_dau || editLichTrinhForm.gio_bat_dau,
+              gio_ket_thuc: updatedLichTrinh?.gio_ket_thuc || editLichTrinhForm.gio_ket_thuc,
+            }
+          : lt
+      )
+    )
+
+    toast({
+      title: "Thành công",
+      description: "Đã cập nhật lịch trình",
+    })
+
+    setShowEditLichTrinhModal(false)
+    setEditingLichTrinh(null)
+    setEditLichTrinhForm({
+      diem_den_id: 0,
+      ngay: "",
+      tieu_de: "",
+      ghi_chu: "",
+      gio_bat_dau: "",
+      gio_ket_thuc: ""
+    })
+
+    return true
+  }
+
+  // Hàm mở modal chỉnh sửa chi phí
+  const handleOpenEditChiPhi = (diemDen: DiemDen) => {
+    setShowEditChiPhiModal(true)
+  }
+
+  // Hàm xử lý cập nhật chi phí
+  const handleUpdateChiPhi = async () => {
+    if (!editingChiPhi) return false
+
+    if (!editChiPhiForm.mo_ta.trim()) {
+      toast({
+        title: "Lỗi",
+        description: "Vui lòng nhập mô tả",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    if (!editChiPhiForm.so_tien || editChiPhiForm.so_tien <= 0) {
+      toast({
+        title: "Lỗi",
+        description: "Vui lòng nhập số tiền hợp lệ",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    if (!editChiPhiForm.nhom) {
+      toast({
+        title: "Lỗi",
+        description: "Vui lòng chọn nhóm chi phí",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    if (!editChiPhiForm.ngay) {
+      toast({
+        title: "Lỗi",
+        description: "Vui lòng chọn ngày",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    setIsUpdatingChiPhi(true)
+    const apiResult = await updateChiPhiToAPI(editingChiPhi.chi_phi_id, {
+      diem_den_id: editChiPhiForm.diem_den_id,
+      so_tien: editChiPhiForm.so_tien,
+      mo_ta: editChiPhiForm.mo_ta.trim(),
+      nhom: editChiPhiForm.nhom,
+      ngay: editChiPhiForm.ngay,
+    })
+    setIsUpdatingChiPhi(false)
+
+    if (!apiResult.success) {
+      toast({
+        title: "Lỗi",
+        description: apiResult.error || "Không thể cập nhật chi phí. Vui lòng thử lại.",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    // Cập nhật state
+    const updatedChiPhi = apiResult.chi_phi
+    setChiPhiList(prevList =>
+      prevList.map(cp =>
+        cp.chi_phi_id === editingChiPhi.chi_phi_id
+          ? {
+              ...cp,
+              diem_den_id: updatedChiPhi?.diem_den_id || editChiPhiForm.diem_den_id,
+              so_tien: updatedChiPhi?.so_tien || editChiPhiForm.so_tien,
+              mo_ta: updatedChiPhi?.mo_ta || editChiPhiForm.mo_ta.trim(),
+              nhom: updatedChiPhi?.nhom || editChiPhiForm.nhom,
+              ngay: updatedChiPhi?.ngay || editChiPhiForm.ngay,
+            }
+          : cp
+      )
+    )
+
+    toast({
+      title: "Thành công",
+      description: "Đã cập nhật chi phí",
+    })
+
+    setShowEditChiPhiModal(false)
+    setEditingChiPhi(null)
+    setEditChiPhiForm({
+      diem_den_id: 0,
+      lich_trinh_id: 0,
+      nguoi_chi_id: 0,
+      nguoi_chi_ten: "",
+      so_tien: 0,
+      mo_ta: "",
+      nhom: "",
+      ngay: ""
+    })
+
+    return true
+  }
+
+  // Hàm xử lý cập nhật điểm đến
+  const handleUpdateDiemDen = async () => {
+    if (!editingDiemDen) return false
+
+    if (!editDiemDenForm.ten_diem_den.trim()) {
+      toast({
+        title: "Lỗi",
+        description: "Vui lòng nhập tên điểm đến",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    setIsUpdatingDiemDen(true)
+    const apiResult = await updateDiemDenToAPI(editingDiemDen.diem_den_id, {
+      ten_diem_den: editDiemDenForm.ten_diem_den.trim(),
+      ngay_bat_dau: editDiemDenForm.ngay_bat_dau,
+      ngay_ket_thuc: editDiemDenForm.ngay_ket_thuc,
+      ghi_chu: editDiemDenForm.ghi_chu,
+    })
+    setIsUpdatingDiemDen(false)
+
+    if (!apiResult.success) {
+      toast({
+        title: "Lỗi",
+        description: apiResult.error || "Không thể cập nhật điểm đến. Vui lòng thử lại.",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    // Cập nhật state
+    const updatedDiemDen = apiResult.diem_den
+    setDiemDenList(prevList =>
+      prevList.map(dd =>
+        dd.diem_den_id === editingDiemDen.diem_den_id
+          ? {
+            ...dd,
+            ten_diem_den: updatedDiemDen?.ten_diem_den || editDiemDenForm.ten_diem_den.trim(),
+            ngay_bat_dau: updatedDiemDen?.ngay_bat_dau || editDiemDenForm.ngay_bat_dau,
+            ngay_ket_thuc: updatedDiemDen?.ngay_ket_thuc || editDiemDenForm.ngay_ket_thuc,
+            ghi_chu: updatedDiemDen?.ghi_chu || editDiemDenForm.ghi_chu,
+          }
+          : dd
+      )
+    )
+
+    toast({
+      title: "Thành công",
+      description: "Đã cập nhật điểm đến",
+    })
+
+    setShowEditDiemDenModal(false)
+    setEditingDiemDen(null)
+    setEditDiemDenForm({
+      ten_diem_den: "",
+      ngay_bat_dau: "",
+      ngay_ket_thuc: "",
+      ghi_chu: ""
+    })
+
+    return true
   }
 
   // Handle Diem Den - Chỉ thêm vào danh sách, không đóng modal (dùng cho nút "Tiếp theo")
@@ -812,7 +1498,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
 
     setDiemDenList([...diemDenList, newDiemDen])
     setDiemDenIdCounter(diemDenIdCounter + 1)
-    
+
     toast({
       title: "Thành công",
       description: "Đã lưu điểm đến",
@@ -830,7 +1516,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
   }
 
   // Handle Lich Trinh - Frontend only
-  const handleLichTrinhSubmit = (): boolean => {
+  const handleLichTrinhSubmit = async (): Promise<boolean> => {
     if (!lichTrinhForm.tieu_de.trim()) {
       toast({
         title: "Lỗi",
@@ -862,7 +1548,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
     let finalDiemDenId = lichTrinhForm.diem_den_id
     let selectedDiemDen: DiemDen | null = null
     let newDiemDenToAdd: DiemDen | null = null
-    
+
     if (lichTrinhForm.diem_den_id === -1) {
       if (!diemDenForm.ten_diem_den.trim()) {
         toast({
@@ -918,14 +1604,14 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
           return false
         }
         ngayLichTrinh.setHours(0, 0, 0, 0)
-        
+
         if (selectedDiemDen.ngay_bat_dau) {
           const ngayBatDau = new Date(selectedDiemDen.ngay_bat_dau)
           if (isNaN(ngayBatDau.getTime())) {
             // Nếu ngày bắt đầu không hợp lệ, bỏ qua validation này
           } else {
             ngayBatDau.setHours(0, 0, 0, 0)
-            
+
             if (ngayLichTrinh.getTime() < ngayBatDau.getTime()) {
               toast({
                 title: "Lỗi",
@@ -943,7 +1629,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
             // Nếu ngày kết thúc không hợp lệ, bỏ qua validation này
           } else {
             ngayKetThuc.setHours(0, 0, 0, 0)
-            
+
             if (ngayLichTrinh.getTime() > ngayKetThuc.getTime()) {
               toast({
                 title: "Lỗi",
@@ -985,10 +1671,10 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
     // Kiểm tra trùng lặp thời gian với các lịch trình khác trong cùng ngày
     if (lichTrinhForm.gio_bat_dau && lichTrinhForm.gio_ket_thuc) {
       // Tìm các lịch trình trong cùng ngày và cùng điểm đến
-      const lichTrinhTrungNgay = lichTrinhList.filter(lt => 
-        lt.ngay === lichTrinhForm.ngay && 
+      const lichTrinhTrungNgay = lichTrinhList.filter(lt =>
+        lt.ngay === lichTrinhForm.ngay &&
         lt.diem_den_id === finalDiemDenId &&
-        lt.gio_bat_dau && 
+        lt.gio_bat_dau &&
         lt.gio_ket_thuc
       )
 
@@ -1030,34 +1716,52 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
       }
     }
 
-    const newLichTrinh: LichTrinh = {
-      lich_trinh_id: lichTrinhIdCounter,
-      diem_den_id: finalDiemDenId,
+    // Gọi API để lưu lịch trình
+    setIsSavingLichTrinh(true)
+    const apiResult = await saveLichTrinhToAPI({
+      diem_den_id: Number(finalDiemDenId),
       ngay: lichTrinhForm.ngay,
       tieu_de: lichTrinhForm.tieu_de.trim(),
-      ghi_chu: lichTrinhForm.ghi_chu,
       gio_bat_dau: lichTrinhForm.gio_bat_dau,
       gio_ket_thuc: lichTrinhForm.gio_ket_thuc,
+      ghi_chu: lichTrinhForm.ghi_chu,
+    })
+    setIsSavingLichTrinh(false)
+
+    if (!apiResult.success) {
+      toast({
+        title: "Lỗi",
+        description: apiResult.error || "Có lỗi xảy ra khi lưu lịch trình",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    // Tạo lịch trình từ dữ liệu API response
+    const savedLichTrinh = apiResult.lich_trinh
+    const newLichTrinh: LichTrinh = {
+      lich_trinh_id: savedLichTrinh?.lich_trinh_id || savedLichTrinh?.id || lichTrinhIdCounter,
+      diem_den_id: Number(finalDiemDenId),
+      ngay: savedLichTrinh?.ngay || lichTrinhForm.ngay,
+      tieu_de: savedLichTrinh?.tieu_de || lichTrinhForm.tieu_de.trim(),
+      ghi_chu: savedLichTrinh?.ghi_chu || lichTrinhForm.ghi_chu,
+      gio_bat_dau: savedLichTrinh?.gio_bat_dau || lichTrinhForm.gio_bat_dau,
+      gio_ket_thuc: savedLichTrinh?.gio_ket_thuc || lichTrinhForm.gio_ket_thuc,
     }
 
     // Debug: Kiểm tra dữ liệu trước khi thêm
     console.log("🔍 Debug - Thêm lịch trình:", {
       newLichTrinh,
+      savedLichTrinh,
       finalDiemDenId,
       currentLichTrinhList: lichTrinhList,
       diemDenList: diemDenList,
       diemDenListIds: diemDenList.map(d => d.diem_den_id)
     })
 
-    // Đảm bảo diem_den_id là number
-    const newLichTrinhWithCorrectId: LichTrinh = {
-      ...newLichTrinh,
-      diem_den_id: Number(finalDiemDenId)
-    }
-
-    setLichTrinhList([...lichTrinhList, newLichTrinhWithCorrectId])
+    setLichTrinhList([...lichTrinhList, newLichTrinh])
     setLichTrinhIdCounter(lichTrinhIdCounter + 1)
-    
+
     toast({
       title: "Thành công",
       description: `Đã thêm lịch trình: ${newLichTrinh.tieu_de}${newLichTrinh.ngay ? ` (${newLichTrinh.ngay})` : ''}`,
@@ -1072,29 +1776,38 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
       gio_bat_dau: "",
       gio_ket_thuc: ""
     })
-    
+
     // Trả về true để báo submit thành công
     return true
   }
 
   // Handle Lich Trinh - Thêm lịch trình nhưng không chuyển tab (dùng cho nút "Thêm lịch trình khác")
-  const handleLichTrinhAdd = (): boolean => {
-    const success = handleLichTrinhSubmit()
+  const handleLichTrinhAdd = async (): Promise<boolean> => {
+    const success = await handleLichTrinhSubmit()
     // Không chuyển tab, chỉ reset form (diem_den_id đã được giữ lại trong handleLichTrinhSubmit)
     return success
   }
 
   // Handle Lich Trinh - Chỉ thêm vào danh sách, không đóng modal (dùng cho nút "Tiếp theo")
-  const handleLichTrinhNext = (): boolean => {
+  const handleLichTrinhNext = async (): Promise<boolean> => {
     // Lưu diem_den_id trước khi submit (vì form sẽ bị reset)
     const savedDiemDenId = lichTrinhForm.diem_den_id
-    
-    const success = handleLichTrinhSubmit()
+
+    const success = await handleLichTrinhSubmit()
     if (success) {
       // Chuyển sang tab "Chi phí"
       setActiveTab("chi-phi")
-      // Tự động chọn điểm đến trong tab "Chi phí"
-      if (savedDiemDenId) {
+      // Tự động set điểm đến trong tab "Chi phí" dựa trên diemDenForm.ten_diem_den
+      // Tìm điểm đến trong danh sách hoặc dùng -1 nếu chưa được lưu
+      if (diemDenForm.ten_diem_den) {
+        const foundDiemDen = diemDenList.find(
+          dd => dd.ten_diem_den.trim().toLowerCase() === diemDenForm.ten_diem_den.trim().toLowerCase()
+        )
+        setChiPhiForm(prev => ({
+          ...prev,
+          diem_den_id: foundDiemDen ? foundDiemDen.diem_den_id : -1
+        }))
+      } else if (savedDiemDenId) {
         setChiPhiForm(prev => ({
           ...prev,
           diem_den_id: savedDiemDenId
@@ -1104,8 +1817,22 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
     return success
   }
 
-  // Handle Chi Phi - Frontend only
-  const handleChiPhiSubmit = (): boolean => {
+  // Tự động cập nhật điểm đến trong tab "Chi phí" khi diemDenForm.ten_diem_den thay đổi
+  useEffect(() => {
+    if (activeTab === "chi-phi" && diemDenForm.ten_diem_den) {
+      // Tìm điểm đến trong danh sách hoặc dùng -1 nếu chưa được lưu
+      const foundDiemDen = diemDenList.find(
+        dd => dd.ten_diem_den.trim().toLowerCase() === diemDenForm.ten_diem_den.trim().toLowerCase()
+      )
+      setChiPhiForm(prev => ({
+        ...prev,
+        diem_den_id: foundDiemDen ? foundDiemDen.diem_den_id : -1
+      }))
+    }
+  }, [diemDenForm.ten_diem_den, activeTab, diemDenList])
+
+  // Handle Chi Phi - Gọi API để lưu chi phí
+  const handleChiPhiSubmit = async (): Promise<boolean> => {
     if (!chiPhiForm.mo_ta.trim()) {
       toast({
         title: "Lỗi",
@@ -1157,7 +1884,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
     let finalDiemDenId = chiPhiForm.diem_den_id
     let selectedDiemDen: DiemDen | null = null
     let newDiemDenToAdd: DiemDen | null = null
-    
+
     if (chiPhiForm.diem_den_id === -1) {
       if (!diemDenForm.ten_diem_den.trim()) {
         toast({
@@ -1213,14 +1940,14 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
           return false
         }
         ngayChiPhi.setHours(0, 0, 0, 0)
-        
+
         if (selectedDiemDen.ngay_bat_dau) {
           const ngayBatDau = new Date(selectedDiemDen.ngay_bat_dau)
           if (isNaN(ngayBatDau.getTime())) {
             // Nếu ngày bắt đầu không hợp lệ, bỏ qua validation này
           } else {
             ngayBatDau.setHours(0, 0, 0, 0)
-            
+
             if (ngayChiPhi.getTime() < ngayBatDau.getTime()) {
               toast({
                 title: "Lỗi",
@@ -1238,7 +1965,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
             // Nếu ngày kết thúc không hợp lệ, bỏ qua validation này
           } else {
             ngayKetThuc.setHours(0, 0, 0, 0)
-            
+
             if (ngayChiPhi.getTime() > ngayKetThuc.getTime()) {
               toast({
                 title: "Lỗi",
@@ -1267,24 +1994,46 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
       setDiemDenIdCounter(diemDenIdCounter + 1)
     }
 
-    const newChiPhi: ChiPhi = {
-      chi_phi_id: chiPhiIdCounter,
-      diem_den_id: finalDiemDenId,
-      lich_trinh_id: chiPhiForm.lich_trinh_id && chiPhiForm.lich_trinh_id !== 0 ? chiPhiForm.lich_trinh_id : undefined,
-      nguoi_chi_id: chiPhiForm.nguoi_chi_id || tripOwner?.nguoi_dung_id || chiPhiIdCounter,
-      nguoi_chi_ten: nguoiChiTen,
+    // Gọi API để lưu chi phí
+    setIsSavingChiPhi(true)
+    const apiResult = await saveChiPhiToAPI({
+      diem_den_id: Number(finalDiemDenId),
       so_tien: chiPhiForm.so_tien,
       mo_ta: chiPhiForm.mo_ta.trim(),
       nhom: chiPhiForm.nhom,
       ngay: chiPhiForm.ngay || new Date().toISOString().split("T")[0],
+    })
+    setIsSavingChiPhi(false)
+
+    if (!apiResult.success) {
+      toast({
+        title: "Lỗi",
+        description: apiResult.error || "Có lỗi xảy ra khi lưu chi phí",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    // Tạo chi phí từ dữ liệu API response
+    const savedChiPhi = apiResult.chi_phi
+    const newChiPhi: ChiPhi = {
+      chi_phi_id: savedChiPhi?.chi_phi_id || savedChiPhi?.id || chiPhiIdCounter,
+      diem_den_id: Number(finalDiemDenId),
+      lich_trinh_id: chiPhiForm.lich_trinh_id && chiPhiForm.lich_trinh_id !== 0 ? chiPhiForm.lich_trinh_id : undefined,
+      nguoi_chi_id: chiPhiForm.nguoi_chi_id || tripOwner?.nguoi_dung_id || chiPhiIdCounter,
+      nguoi_chi_ten: nguoiChiTen,
+      so_tien: savedChiPhi?.so_tien || chiPhiForm.so_tien,
+      mo_ta: savedChiPhi?.mo_ta || chiPhiForm.mo_ta.trim(),
+      nhom: savedChiPhi?.nhom || chiPhiForm.nhom,
+      ngay: savedChiPhi?.ngay || chiPhiForm.ngay || new Date().toISOString().split("T")[0],
     }
 
     setChiPhiList([...chiPhiList, newChiPhi])
     setChiPhiIdCounter(chiPhiIdCounter + 1)
-    
+
     toast({
       title: "Thành công",
-      description: `Đã thêm chi phí: ${newChiPhi.mo_ta} - ${newChiPhi.so_tien.toLocaleString('vi-VN')} VNĐ`,
+      description: `Đã thêm chi phí: ${newChiPhi.mo_ta} - ${formatCurrency(newChiPhi.so_tien)} VNĐ`,
     })
 
     // Reset form sau khi thêm thành công nhưng giữ lại diem_den_id để có thể thêm nhiều chi phí
@@ -1299,14 +2048,14 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
       nhom: chiPhiForm.nhom || "", // Giữ lại nhóm đã chọn
       ngay: chiPhiForm.ngay || "" // Giữ lại ngày đã chọn
     })
-    
+
     // Trả về true để báo submit thành công
     return true
   }
 
   // Handle Chi Phi - Thêm chi phí nhưng không đóng modal (dùng cho nút "Thêm chi phí khác")
-  const handleChiPhiAdd = (): boolean => {
-    const success = handleChiPhiSubmit()
+  const handleChiPhiAdd = async (): Promise<boolean> => {
+    const success = await handleChiPhiSubmit()
     // Không đóng modal, chỉ reset form (diem_den_id và lich_trinh_id đã được giữ lại trong handleChiPhiSubmit)
     return success
   }
@@ -1343,6 +2092,18 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
   // Get chi phí theo lịch trình (chỉ lấy chi phí có lich_trinh_id trùng khớp)
   const getChiPhiByLichTrinh = (lichTrinhId: number) => {
     return chiPhiList.filter(cp => cp.lich_trinh_id === lichTrinhId)
+  }
+
+  // Nhóm lịch trình theo ngày
+  const groupLichTrinhByNgay = (lichTrinhList: LichTrinh[]) => {
+    const grouped: { [key: string]: LichTrinh[] } = {}
+    lichTrinhList.forEach(lt => {
+      if (!grouped[lt.ngay]) {
+        grouped[lt.ngay] = []
+      }
+      grouped[lt.ngay].push(lt)
+    })
+    return grouped
   }
 
   // Xuất PDF
@@ -1424,7 +2185,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
       pdfElement.style.width = originalStyles.width || '210mm'
 
       const imgData = canvas.toDataURL("image/png")
-      
+
       // Tính toán kích thước PDF
       const imgWidth = 210 // A4 width in mm
       const pageHeight = 297 // A4 height in mm
@@ -1449,7 +2210,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
 
       // Lấy tên chuyến đi từ tripInfo hoặc tripId
       const fileName = `ke-hoach-chuyen-di-${tripId}-${new Date().toISOString().split("T")[0]}.pdf`
-      
+
       // Tải xuống PDF
       pdf.save(fileName)
 
@@ -1478,8 +2239,8 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Kế hoạch chuyến đi</h2>
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={handleExportPDF}
             disabled={isExportingPDF || sortedDiemDenList.length === 0}
           >
@@ -1503,9 +2264,9 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
       </div>
 
       {/* Nội dung để xuất PDF (ẩn các nút, chỉ hiển thị dữ liệu) */}
-      <div 
-        ref={pdfContentRef} 
-        style={{ 
+      <div
+        ref={pdfContentRef}
+        style={{
           position: 'absolute',
           left: '-9999px',
           top: '0',
@@ -1581,67 +2342,98 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                       </div>
                     </div>
 
-                    {/* Lịch trình */}
-                    {lichTrinhOfDiemDen.length > 0 && (
-                      <div style={{ marginBottom: '24px' }}>
-                        <h4 style={{ fontSize: '18px', fontWeight: '600', color: '#1f2937', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span>📅</span>
-                          Lịch trình ({lichTrinhOfDiemDen.length} hoạt động)
-                        </h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginLeft: '24px' }}>
-                          {lichTrinhOfDiemDen.map((lichTrinh) => {
-                            const chiPhiOfLichTrinh = lichTrinh.lich_trinh_id 
-                              ? getChiPhiByLichTrinh(lichTrinh.lich_trinh_id)
-                              : getChiPhiByNgay(diemDen.diem_den_id, lichTrinh.ngay)
-                            const totalChiPhiNgay = chiPhiOfLichTrinh.reduce((sum, cp) => sum + cp.so_tien, 0)
+                    {/* Lịch trình - Nhóm theo ngày */}
+                    {lichTrinhOfDiemDen.length > 0 && (() => {
+                      const lichTrinhGroupedByNgay = groupLichTrinhByNgay(lichTrinhOfDiemDen)
+                      const sortedDates = Object.keys(lichTrinhGroupedByNgay).sort((a, b) =>
+                        new Date(a).getTime() - new Date(b).getTime()
+                      )
 
-                            return (
-                              <div key={lichTrinh.lich_trinh_id} style={{ borderLeft: '4px solid #3b82f6', paddingLeft: '16px', paddingTop: '8px', paddingBottom: '8px', backgroundColor: '#f9fafb', borderRadius: '0 4px 4px 0' }}>
-                                <h5 style={{ fontWeight: '600', color: '#1f2937', marginBottom: '4px' }}>{lichTrinh.tieu_de}</h5>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '14px', color: '#4b5563', marginBottom: '8px' }}>
-                                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <span>📅</span>
-                                    {new Date(lichTrinh.ngay).toLocaleDateString("vi-VN")}
-                                  </span>
-                                  {lichTrinh.gio_bat_dau && lichTrinh.gio_ket_thuc && (
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                      <span>⏰</span>
-                                      {lichTrinh.gio_bat_dau} - {lichTrinh.gio_ket_thuc}
+                      return (
+                        <div style={{ marginBottom: '24px' }}>
+                          <h4 style={{ fontSize: '18px', fontWeight: '600', color: '#1f2937', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>📅</span>
+                            Lịch trình ({lichTrinhOfDiemDen.length} hoạt động)
+                          </h4>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginLeft: '24px' }}>
+                            {sortedDates.map((ngay) => {
+                              const lichTrinhTrongNgay = lichTrinhGroupedByNgay[ngay]
+                              // Lấy tất cả chi phí có cùng ngày và cùng điểm đến
+                              const chiPhiTrongNgay = getChiPhiByNgay(diemDen.diem_den_id, ngay)
+                              const totalChiPhiNgay = chiPhiTrongNgay.reduce((sum, cp) => sum + cp.so_tien, 0)
+
+                              return (
+                                <div key={ngay} style={{ border: '2px solid #3b82f6', borderRadius: '8px', padding: '16px', backgroundColor: '#f9fafb' }}>
+                                  {/* Header ngày */}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', paddingBottom: '8px', borderBottom: '2px solid #3b82f6' }}>
+                                    <span style={{ fontSize: '16px' }}>📅</span>
+                                    <h5 style={{ fontSize: '16px', fontWeight: '600', color: '#1f2937' }}>
+                                      {new Date(ngay).toLocaleDateString("vi-VN", {
+                                        weekday: "long",
+                                        year: "numeric",
+                                        month: "long",
+                                        day: "numeric"
+                                      })}
+                                    </h5>
+                                    <span style={{ fontSize: '12px', color: '#6b7280', marginLeft: 'auto' }}>
+                                      ({lichTrinhTrongNgay.length} hoạt động)
                                     </span>
+                                  </div>
+
+                                  {/* Danh sách lịch trình trong ngày */}
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: chiPhiTrongNgay.length > 0 ? '12px' : '0' }}>
+                                    {lichTrinhTrongNgay.map((lichTrinh) => (
+                                      <div key={lichTrinh.lich_trinh_id} style={{ borderLeft: '3px solid #60a5fa', paddingLeft: '12px', paddingTop: '8px', paddingBottom: '8px', backgroundColor: '#ffffff', borderRadius: '0 4px 4px 0' }}>
+                                        <h6 style={{ fontWeight: '600', color: '#1f2937', marginBottom: '4px', fontSize: '14px' }}>{lichTrinh.tieu_de}</h6>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '12px', color: '#4b5563', marginBottom: '4px' }}>
+                                          {lichTrinh.gio_bat_dau && lichTrinh.gio_ket_thuc && (
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                              <span>⏰</span>
+                                              {lichTrinh.gio_bat_dau} - {lichTrinh.gio_ket_thuc}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {lichTrinh.ghi_chu && (
+                                          <p style={{ fontSize: '12px', color: '#4b5563', marginTop: '4px' }}>{lichTrinh.ghi_chu}</p>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  {/* Chi phí trong ngày */}
+                                  {chiPhiTrongNgay.length > 0 && (
+                                    <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '2px solid #e5e7eb' }}>
+                                      <p style={{ fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <span>💰</span>
+                                        Chi phí trong ngày:
+                                      </p>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginLeft: '12px' }}>
+                                        {chiPhiTrongNgay.map((chiPhi) => (
+                                          <div key={chiPhi.chi_phi_id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '4px 0' }}>
+                                            <span style={{ color: '#4b5563' }}>
+                                              • {chiPhi.mo_ta} {chiPhi.nhom && `(${chiPhi.nhom})`}
+                                            </span>
+                                            <span style={{ fontWeight: '600', color: '#1f2937' }}>
+                                              {formatCurrency(chiPhi.so_tien)} VNĐ
+                                            </span>
+                                          </div>
+                                        ))}
+                                        {totalChiPhiNgay > 0 && (
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: '600', color: '#1f2937', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
+                                            <span>Tổng chi phí ngày:</span>
+                                            <span>{formatCurrency(totalChiPhiNgay)} VNĐ</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
                                   )}
                                 </div>
-                                {lichTrinh.ghi_chu && (
-                                  <p style={{ fontSize: '14px', color: '#4b5563', marginBottom: '8px' }}>{lichTrinh.ghi_chu}</p>
-                                )}
-                                {chiPhiOfLichTrinh.length > 0 && (
-                                  <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
-                                    <p style={{ fontSize: '12px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Chi phí trong ngày:</p>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginLeft: '12px' }}>
-                                      {chiPhiOfLichTrinh.map((chiPhi) => (
-                                        <div key={chiPhi.chi_phi_id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                                          <span style={{ color: '#4b5563' }}>
-                                            • {chiPhi.mo_ta} {chiPhi.nhom && `(${chiPhi.nhom})`}
-                                          </span>
-                                          <span style={{ fontWeight: '600', color: '#1f2937' }}>
-                                            {formatCurrency(chiPhi.so_tien)} VNĐ
-                                          </span>
-                                        </div>
-                                      ))}
-                                      {totalChiPhiNgay > 0 && (
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '600', color: '#1f2937', marginTop: '4px', paddingTop: '4px', borderTop: '1px solid #e5e7eb' }}>
-                                          <span>Tổng:</span>
-                                          <span>{formatCurrency(totalChiPhiNgay)} VNĐ</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })}
+                              )
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )
+                    })()}
 
                     {/* Chi phí tổng hợp */}
                     {totalChiPhi > 0 && (
@@ -1736,6 +2528,29 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                           </span>
                         )}
                       </Badge>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleOpenEditDiemDen(diemDen)}>
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Chỉnh sửa điểm đến
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setDeletingDiemDen(diemDen)
+                              setShowDeleteDiemDenDialog(true)
+                            }}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Xóa kế hoạch
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 </AccordionTrigger>
@@ -1751,62 +2566,102 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                       </div>
                     )}
 
-                    {/* Lịch trình */}
+                    {/* Lịch trình - Nhóm theo ngày */}
                     <div>
                       <div className="flex items-center gap-2 mb-3">
                         <Calendar className="h-4 w-4 text-primary" />
                         <h4 className="font-semibold">Lịch trình</h4>
                         <Badge variant="outline">{lichTrinhOfDiemDen.length} hoạt động</Badge>
                       </div>
+
                       {lichTrinhOfDiemDen.length === 0 ? (
                         <p className="text-sm text-muted-foreground pl-6">Chưa có lịch trình nào cho điểm đến này</p>
-                      ) : (
-                        <div className="space-y-3 pl-6">
-                          {lichTrinhOfDiemDen.map((lichTrinh) => {
-                            // Lấy chi phí của lịch trình này (nếu có lich_trinh_id) hoặc chi phí theo ngày (nếu không có lich_trinh_id)
-                            const chiPhiOfLichTrinh = lichTrinh.lich_trinh_id 
-                              ? getChiPhiByLichTrinh(lichTrinh.lich_trinh_id)
-                              : getChiPhiByNgay(diemDen.diem_den_id, lichTrinh.ngay)
-                            const totalChiPhiNgay = chiPhiOfLichTrinh.reduce((sum, cp) => sum + cp.so_tien, 0)
+                      ) : (() => {
+                        const lichTrinhGroupedByNgay = groupLichTrinhByNgay(lichTrinhOfDiemDen)
+                        const sortedDates = Object.keys(lichTrinhGroupedByNgay).sort((a, b) =>
+                          new Date(a).getTime() - new Date(b).getTime()
+                        )
 
-                            return (
-                              <Card key={lichTrinh.lich_trinh_id} className="border-l-4 border-l-primary">
-                                <CardContent className="p-4">
-                                  <div className="space-y-3">
-                                    {/* Thông tin lịch trình */}
-                                    <div>
-                                      <h5 className="font-semibold mb-2">{lichTrinh.tieu_de}</h5>
-                                      <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
-                                        <span className="flex items-center gap-1">
-                                          <Calendar className="h-3 w-3" />
-                                          {new Date(lichTrinh.ngay).toLocaleDateString("vi-VN")}
-                                        </span>
-                                        {lichTrinh.gio_bat_dau && lichTrinh.gio_ket_thuc && (
-                                          <span className="flex items-center gap-1">
-                                            <Clock className="h-3 w-3" />
-                                            {lichTrinh.gio_bat_dau} - {lichTrinh.gio_ket_thuc}
-                                          </span>
-                                        )}
-                                      </div>
-                                      {lichTrinh.ghi_chu && (
-                                        <p className="text-sm text-muted-foreground">{lichTrinh.ghi_chu}</p>
-                                      )}
+                        return (
+                          <div className="space-y-4 pl-6">
+                            {sortedDates.map((ngay) => {
+                              const lichTrinhTrongNgay = lichTrinhGroupedByNgay[ngay]
+                              // Lấy tất cả chi phí có cùng ngày và cùng điểm đến
+                              const chiPhiTrongNgay = getChiPhiByNgay(diemDen.diem_den_id, ngay)
+                              const totalChiPhiNgay = chiPhiTrongNgay.reduce((sum, cp) => sum + cp.so_tien, 0)
+
+                              return (
+                                <Card key={ngay} className="border-2 border-primary">
+                                  <CardContent className="p-4">
+                                    {/* Header ngày */}
+                                    <div className="flex items-center gap-2 mb-4 pb-3 border-b-2 border-primary">
+                                      <Calendar className="h-4 w-4 text-primary" />
+                                      <h5 className="font-semibold text-lg">
+                                        {new Date(ngay).toLocaleDateString("vi-VN", {
+                                          weekday: "long",
+                                          year: "numeric",
+                                          month: "long",
+                                          day: "numeric"
+                                        })}
+                                      </h5>
+                                      <Badge variant="secondary" className="ml-auto">
+                                        {lichTrinhTrongNgay.length} hoạt động
+                                      </Badge>
+
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                            <MoreVertical className="h-4 w-4" />
+                                          </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                          <DropdownMenuItem onClick={() => handleOpenEditLichTrinh(diemDen)}>
+                                            <Pencil className="mr-2 h-4 w-4" />
+                                            Chỉnh sửa lịch trình
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem onClick={() => handleOpenEditChiPhi(diemDen)}>
+                                            <Pencil className="mr-2 h-4 w-4" />
+                                            Chỉnh sửa chi phí
+                                          </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
                                     </div>
 
-                                    {/* Chi phí của lịch trình này */}
-                                    {chiPhiOfLichTrinh.length > 0 && (
-                                      <div className="mt-3 pt-3 border-t">
-                                        <div className="flex items-center gap-2 mb-2">
-                                          <DollarSign className="h-3 w-3 text-secondary" />
-                                          <span className="text-sm font-medium text-muted-foreground">Chi phí trong ngày:</span>
+
+                                    {/* Danh sách lịch trình trong ngày */}
+                                    <div className="space-y-2 mb-4">
+                                      {lichTrinhTrongNgay.map((lichTrinh) => (
+                                        <div key={lichTrinh.lich_trinh_id} className="border-l-4 border-l-blue-400 pl-3 py-2 bg-muted/30 rounded-r">
+                                          <h6 className="font-semibold text-sm mb-1">{lichTrinh.tieu_de}</h6>
+                                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                            {lichTrinh.gio_bat_dau && lichTrinh.gio_ket_thuc && (
+                                              <span className="flex items-center gap-1">
+                                                <Clock className="h-3 w-3" />
+                                                {lichTrinh.gio_bat_dau} - {lichTrinh.gio_ket_thuc}
+                                              </span>
+                                            )}
+                                          </div>
+                                          {lichTrinh.ghi_chu && (
+                                            <p className="text-xs text-muted-foreground mt-1">{lichTrinh.ghi_chu}</p>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    {/* Chi phí trong ngày */}
+                                    {chiPhiTrongNgay.length > 0 && (
+                                      <div className="mt-4 pt-4 border-t-2">
+                                        <div className="flex items-center gap-2 mb-3">
+                                          <DollarSign className="h-4 w-4 text-primary" />
+                                          <span className="text-sm font-semibold">Chi phí trong ngày:</span>
                                           {totalChiPhiNgay > 0 && (
-                                            <Badge variant="secondary" className="ml-auto">
+                                            <Badge variant="default" className="ml-auto">
                                               Tổng: {formatCurrency(totalChiPhiNgay)} VNĐ
                                             </Badge>
                                           )}
                                         </div>
-                                        <div className="space-y-2 ml-5">
-                                          {chiPhiOfLichTrinh.map((chiPhi) => (
+                                        <div className="space-y-2">
+                                          {chiPhiTrongNgay.map((chiPhi) => (
                                             <div key={chiPhi.chi_phi_id} className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
                                               <div className="flex-1">
                                                 <div className="flex items-center gap-2">
@@ -1829,13 +2684,13 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                                         </div>
                                       </div>
                                     )}
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            )
-                          })}
-                        </div>
-                      )}
+                                  </CardContent>
+                                </Card>
+                              )
+                            })}
+                          </div>
+                        )
+                      })()}
                     </div>
 
                     {/* Tổng chi phí điểm đến */}
@@ -1869,7 +2724,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
           const autoDiaDiemXuatPhat = diemDenList.length === 0
             ? tripInfo?.dia_diem_xuat_phat || ""
             : diemDenList[diemDenList.length - 1]?.ten_diem_den || ""
-          
+
           setDiemDenForm({
             ten_diem_den: "",
             thu_tu: diemDenList.length + 1,
@@ -1903,46 +2758,43 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
           <DialogHeader>
             <DialogTitle>Thêm kế hoạch</DialogTitle>
           </DialogHeader>
-          <Tabs 
-            value={activeTab} 
+          <Tabs
+            value={activeTab}
             onValueChange={() => {
               // Vô hiệu hóa chuyển tab thủ công - chỉ cho phép chuyển tab tự động
               // Người dùng không thể tự chuyển tab, chỉ có thể chuyển qua nút "Tiếp theo"
-            }} 
+            }}
             className="w-full"
           >
             <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger 
-                value="diem-den" 
-                className={`flex items-center gap-2 pointer-events-none cursor-default transition-all ${
-                  activeTab === "diem-den" 
-                    ? "font-bold bg-blue-500 text-white border-2 border-blue-600 shadow-lg scale-105 hover:bg-blue-600" 
-                    : "opacity-40 border-2 border-transparent bg-muted text-muted-foreground"
-                }`}
+              <TabsTrigger
+                value="diem-den"
+                className={`flex items-center gap-2 pointer-events-none cursor-default transition-all ${activeTab === "diem-den"
+                  ? "font-bold bg-blue-500 text-white border-2 border-blue-600 shadow-lg scale-105 hover:bg-blue-600"
+                  : "opacity-40 border-2 border-transparent bg-muted text-muted-foreground"
+                  }`}
                 disabled={true}
               >
                 <MapPin className="h-4 w-4" />
                 Điểm đến
               </TabsTrigger>
-              <TabsTrigger 
-                value="lich-trinh" 
-                className={`flex items-center gap-2 pointer-events-none cursor-default transition-all ${
-                  activeTab === "lich-trinh" 
-                    ? "font-bold bg-blue-500 text-white border-2 border-blue-600 shadow-lg scale-105 hover:bg-blue-600" 
-                    : "opacity-40 border-2 border-transparent bg-muted text-muted-foreground"
-                }`}
+              <TabsTrigger
+                value="lich-trinh"
+                className={`flex items-center gap-2 pointer-events-none cursor-default transition-all ${activeTab === "lich-trinh"
+                  ? "font-bold bg-blue-500 text-white border-2 border-blue-600 shadow-lg scale-105 hover:bg-blue-600"
+                  : "opacity-40 border-2 border-transparent bg-muted text-muted-foreground"
+                  }`}
                 disabled={true}
               >
                 <Calendar className="h-4 w-4" />
                 Lịch trình
               </TabsTrigger>
-              <TabsTrigger 
-                value="chi-phi" 
-                className={`flex items-center gap-2 pointer-events-none cursor-default transition-all ${
-                  activeTab === "chi-phi" 
-                    ? "font-bold bg-blue-500 text-white border-2 border-blue-600 shadow-lg scale-105 hover:bg-blue-600" 
-                    : "opacity-40 border-2 border-transparent bg-muted text-muted-foreground"
-                }`}
+              <TabsTrigger
+                value="chi-phi"
+                className={`flex items-center gap-2 pointer-events-none cursor-default transition-all ${activeTab === "chi-phi"
+                  ? "font-bold bg-blue-500 text-white border-2 border-blue-600 shadow-lg scale-105 hover:bg-blue-600"
+                  : "opacity-40 border-2 border-transparent bg-muted text-muted-foreground"
+                  }`}
                 disabled={true}
               >
                 <DollarSign className="h-4 w-4" />
@@ -1974,7 +2826,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="ngay_bat_dau" className="mb-2 block">Ngày bắt đầu</Label>
@@ -2004,7 +2856,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                   const autoDiaDiemXuatPhat = diemDenList.length === 0
                     ? tripInfo?.dia_diem_xuat_phat || ""
                     : diemDenList[diemDenList.length - 1]?.ten_diem_den || ""
-                  
+
                   return (
                     <div className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm items-center">
                       <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -2015,7 +2867,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                   )
                 })()}
                 <p className="text-xs text-muted-foreground mt-1">
-                  {diemDenList.length === 0 
+                  {diemDenList.length === 0
                     ? `Địa điểm xuất phát đầu tiên sẽ lấy từ điểm xuất phát của chuyến đi: ${tripInfo?.dia_diem_xuat_phat || "đang tải..."}`
                     : `Địa điểm xuất phát sẽ lấy từ điểm đến trước đó: ${diemDenList[diemDenList.length - 1]?.ten_diem_den || ""}`
                   }
@@ -2032,8 +2884,8 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                 />
               </div>
               <DialogFooter>
-              
-                <Button 
+
+                <Button
                   onClick={async () => {
                     await handleDiemDenNext()
                   }}
@@ -2186,10 +3038,10 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                 />
               </div>
               <DialogFooter className="flex gap-2">
-             
+
                 {/* Nút quay lại - chỉ hiển thị khi đã có điểm đến */}
                 {diemDenList.length > 0 && (
-                  <Button 
+                  <Button
                     variant="outline"
                     onClick={() => {
                       setActiveTab("diem-den")
@@ -2199,20 +3051,42 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                     Quay lại
                   </Button>
                 )}
-                <Button 
+                <Button
                   variant="secondary"
-                  onClick={() => {
-                    handleLichTrinhAdd()
+                  onClick={async () => {
+                    await handleLichTrinhAdd()
                   }}
+                  disabled={isSavingLichTrinh}
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Thêm lịch trình khác
+                  {isSavingLichTrinh ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Đang lưu...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Thêm lịch trình khác
+                    </>
+                  )}
                 </Button>
-                <Button onClick={() => {
-                  handleLichTrinhNext()
-                }}>
-                  <ChevronRight className="h-4 w-4 mr-2" />
-                  Tiếp theo
+                <Button
+                  onClick={async () => {
+                    await handleLichTrinhNext()
+                  }}
+                  disabled={isSavingLichTrinh}
+                >
+                  {isSavingLichTrinh ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Đang lưu...
+                    </>
+                  ) : (
+                    <>
+                      <ChevronRight className="h-4 w-4 mr-2" />
+                      Tiếp theo
+                    </>
+                  )}
                 </Button>
               </DialogFooter>
             </TabsContent>
@@ -2293,138 +3167,21 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
               )}
               <div>
                 <Label htmlFor="diem_den_id_chi_phi" className="mb-2 block">Điểm đến *</Label>
-                <select
-                  id="diem_den_id_chi_phi"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  value={chiPhiForm.diem_den_id}
-                  onChange={(e) => setChiPhiForm({ ...chiPhiForm, diem_den_id: parseInt(e.target.value) })}
-                >
-                  <option value={0} disabled>Chọn điểm đến</option>
-                  {/* Kiểm tra xem điểm đến đang điền có trùng với danh sách không */}
-                  {(() => {
-                    const isDuplicate = diemDenList.some(
-                      (dd) => dd.ten_diem_den.trim().toLowerCase() === diemDenForm.ten_diem_den.trim().toLowerCase()
-                    )
-                    // Chỉ hiển thị "đang điền" nếu không trùng với danh sách
-                    if (diemDenForm.ten_diem_den && !isDuplicate) {
-                      return (
-                        <option value={-1} style={{ fontWeight: 'bold', color: '#3b82f6' }}>
-                          {diemDenForm.ten_diem_den} (đang điền)
-                        </option>
-                      )
-                    }
-                    return null
-                  })()}
-                  {/* Hiển thị danh sách điểm đến đã thêm */}
-                  {diemDenList.map((diemDen) => (
-                    <option key={diemDen.diem_den_id} value={diemDen.diem_den_id}>
-                      {diemDen.ten_diem_den}
-                    </option>
-                  ))}
-                </select>
-                {diemDenForm.ten_diem_den && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    💡 Điểm đến đang điền ở tab "Điểm đến" sẽ được thêm vào danh sách sau khi bạn click "Thêm"
-                  </p>
+                {diemDenForm.ten_diem_den ? (
+                  <div className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm items-center">
+                    <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <span className="font-medium text-foreground">{diemDenForm.ten_diem_den}</span>
+                  </div>
+                ) : (
+                  <div className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm items-center text-muted-foreground">
+                    <span>Chưa chọn điểm đến ở tab "Điểm đến"</span>
+                  </div>
                 )}
-              </div>
-              {/* Dropdown chọn lịch trình (filter theo điểm đến đã chọn) */}
-              {chiPhiForm.diem_den_id && chiPhiForm.diem_den_id !== 0 && (
-                <div>
-                  <Label htmlFor="lich_trinh_id_chi_phi" className="mb-2 block">Lịch trình (tùy chọn)</Label>
-                  <select
-                    id="lich_trinh_id_chi_phi"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    value={chiPhiForm.lich_trinh_id || 0}
-                    onChange={(e) => {
-                      const selectedLichTrinhId = parseInt(e.target.value)
-                      // Tự động điền ngày từ lịch trình đã chọn
-                      if (selectedLichTrinhId && selectedLichTrinhId !== 0) {
-                        const selectedLichTrinh = lichTrinhList.find(lt => lt.lich_trinh_id === selectedLichTrinhId)
-                        if (selectedLichTrinh && selectedLichTrinh.ngay) {
-                          setChiPhiForm(prev => ({ ...prev, lich_trinh_id: selectedLichTrinhId, ngay: selectedLichTrinh.ngay }))
-                        } else {
-                          setChiPhiForm(prev => ({ ...prev, lich_trinh_id: selectedLichTrinhId }))
-                        }
-                      } else {
-                        setChiPhiForm(prev => ({ ...prev, lich_trinh_id: 0 }))
-                      }
-                    }}
-                  >
-                    <option value={0}>Không chọn lịch trình</option>
-                    {(() => {
-                      // Lấy danh sách các lịch trình đã có chi phí
-                      const lichTrinhDaCoChiPhi = chiPhiList
-                        .filter(cp => cp.lich_trinh_id && cp.lich_trinh_id !== 0)
-                        .map(cp => cp.lich_trinh_id)
-                      
-                      // Filter lịch trình: chỉ hiển thị những lịch trình chưa có chi phí
-                      // Loại bỏ hoàn toàn các lịch trình đã có chi phí
-                      return lichTrinhList
-                        .filter(lt => lt.diem_den_id === chiPhiForm.diem_den_id)
-                        .filter(lt => !lichTrinhDaCoChiPhi.includes(lt.lich_trinh_id))
-                        .map((lichTrinh) => (
-                          <option key={lichTrinh.lich_trinh_id} value={lichTrinh.lich_trinh_id}>
-                            {lichTrinh.tieu_de} - {lichTrinh.ngay} {lichTrinh.gio_bat_dau ? `(${lichTrinh.gio_bat_dau})` : ''}
-                          </option>
-                        ))
-                    })()}
-                  </select>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    💡 Chọn lịch trình để liên kết chi phí với hoạt động cụ thể. Ngày sẽ được tự động điền.
-                  </p>
-                </div>
-              )}
-              <div>
-                <Label htmlFor="nguoi_chi_ten" className="mb-2 block">Tên người chi *</Label>
-                <Input
-                  id="nguoi_chi_ten"
-                  value={chiPhiForm.nguoi_chi_ten || tripOwner?.ho_ten || ""}
-                  readOnly
-                  disabled
-                  className="bg-muted cursor-not-allowed"
-                  placeholder="Tự động điền từ chủ chuyến đi"
-                />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Tên người chi luôn là chủ của chuyến đi
+                  💡 Điểm đến được tự động lấy từ "Điểm đến" và không thể chỉnh sửa
                 </p>
               </div>
-              <div>
-                <Label htmlFor="so_tien" className="mb-2 block">Số tiền *</Label>
-                <Input
-                  id="so_tien"
-                  type="number"
-                  value={chiPhiForm.so_tien || ""}
-                  onChange={(e) => setChiPhiForm({ ...chiPhiForm, so_tien: parseFloat(e.target.value) || 0 })}
-                  placeholder="Nhập số tiền"
-                />
-              </div>
-              <div>
-                <Label htmlFor="mo_ta" className="mb-2 block">Mô tả *</Label>
-                <Input
-                  id="mo_ta"
-                  value={chiPhiForm.mo_ta}
-                  onChange={(e) => setChiPhiForm({ ...chiPhiForm, mo_ta: e.target.value })}
-                  placeholder="Nhập mô tả"
-                />
-              </div>
-              <div>
-                <Label htmlFor="nhom" className="mb-2 block">Nhóm *</Label>
-                <select
-                  id="nhom"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  value={chiPhiForm.nhom}
-                  onChange={(e) => setChiPhiForm({ ...chiPhiForm, nhom: e.target.value })}
-                  required
-                >
-                  <option value="">Chọn nhóm</option>
-                  {expenseTypes.map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+
               <div>
                 <Label htmlFor="ngay_chi_phi" className="mb-2 block">Ngày</Label>
                 {availableDates.length > 0 ? (
@@ -2463,11 +3220,48 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                   </p>
                 )}
               </div>
+              <div>
+                <Label htmlFor="so_tien" className="mb-2 block">Số tiền *</Label>
+                <Input
+                  id="so_tien"
+                  type="number"
+                  value={chiPhiForm.so_tien || ""}
+                  onChange={(e) => setChiPhiForm({ ...chiPhiForm, so_tien: parseFloat(e.target.value) || 0 })}
+                  placeholder="Nhập số tiền"
+                />
+              </div>
+              <div>
+                <Label htmlFor="mo_ta" className="mb-2 block">Mô tả *</Label>
+                <Input
+                  id="mo_ta"
+                  value={chiPhiForm.mo_ta}
+                  onChange={(e) => setChiPhiForm({ ...chiPhiForm, mo_ta: e.target.value })}
+                  placeholder="Nhập mô tả"
+                />
+              </div>
+              <div>
+                <Label htmlFor="nhom" className="mb-2 block">Nhóm *</Label>
+                <select
+                  id="nhom"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={chiPhiForm.nhom}
+                  onChange={(e) => setChiPhiForm({ ...chiPhiForm, nhom: e.target.value })}
+                  required
+                >
+                  <option value="">Chọn nhóm</option>
+                  {expenseTypes.map((type) => (
+                    <option key={type.value} value={type.value}>
+                      {type.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <DialogFooter className="flex gap-2">
-                
+
                 {/* Nút quay lại - chỉ hiển thị khi đã có lịch trình */}
                 {lichTrinhList.length > 0 && (
-                  <Button 
+                  <Button
                     variant="outline"
                     onClick={() => {
                       setActiveTab("lich-trinh")
@@ -2477,34 +3271,366 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                     Quay lại
                   </Button>
                 )}
-                <Button 
+                <Button
                   variant="secondary"
-                  onClick={() => {
-                    handleChiPhiAdd()
+                  onClick={async () => {
+                    await handleChiPhiAdd()
                   }}
+                  disabled={isSavingChiPhi}
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Thêm chi phí khác
+                  {isSavingChiPhi ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Đang lưu...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Thêm chi phí khác
+                    </>
+                  )}
                 </Button>
-                <Button onClick={() => {
-                  const success = handleChiPhiSubmit()
-                  if (success) {
-                  setShowAddPlanModal(false)
-                    // Reset form và quay về tab "Điểm đến" cho lần tiếp theo
-                    setActiveTab("diem-den")
-                    // Reset các form
-                    const autoDiaDiemXuatPhat = diemDenList.length === 0
-                      ? tripInfo?.dia_diem_xuat_phat || ""
-                      : diemDenList[diemDenList.length - 1]?.ten_diem_den || ""
-                    setDiemDenForm({
-                      ten_diem_den: "",
-                      thu_tu: diemDenList.length + 1,
-                      ngay_bat_dau: "",
-                      ngay_ket_thuc: "",
-                      dia_diem_xuat_phat: autoDiaDiemXuatPhat,
-                      ghi_chu: ""
-                    })
-                    setLichTrinhForm({
+                <Button
+                  onClick={async () => {
+                    const success = await handleChiPhiSubmit()
+                    if (success) {
+                      setShowAddPlanModal(false)
+                      // Reset form và quay về tab "Điểm đến" cho lần tiếp theo
+                      setActiveTab("diem-den")
+                      // Reset các form
+                      const autoDiaDiemXuatPhat = diemDenList.length === 0
+                        ? tripInfo?.dia_diem_xuat_phat || ""
+                        : diemDenList[diemDenList.length - 1]?.ten_diem_den || ""
+                      setDiemDenForm({
+                        ten_diem_den: "",
+                        thu_tu: diemDenList.length + 1,
+                        ngay_bat_dau: "",
+                        ngay_ket_thuc: "",
+                        dia_diem_xuat_phat: autoDiaDiemXuatPhat,
+                        ghi_chu: ""
+                      })
+                      setLichTrinhForm({
+                        diem_den_id: 0,
+                        ngay: "",
+                        tieu_de: "",
+                        ghi_chu: "",
+                        gio_bat_dau: "",
+                        gio_ket_thuc: ""
+                      })
+                      setChiPhiForm({
+                        diem_den_id: 0,
+                        lich_trinh_id: 0,
+                        nguoi_chi_id: 0,
+                        nguoi_chi_ten: "",
+                        so_tien: 0,
+                        mo_ta: "",
+                        nhom: "",
+                        ngay: ""
+                      })
+                    }
+                  }}
+                  disabled={isSavingChiPhi}
+                >
+                  {isSavingChiPhi ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Đang lưu...
+                    </>
+                  ) : (
+                    "Tiếp theo"
+                  )}
+                </Button>
+              </DialogFooter>
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal chỉnh sửa điểm đến */}
+      <Dialog open={showEditDiemDenModal} onOpenChange={setShowEditDiemDenModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Chỉnh sửa điểm đến</DialogTitle>
+            <DialogDescription>
+              Cập nhật thông tin điểm đến
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label htmlFor="edit_ten_diem_den" className="mb-2 block">Tên điểm đến *</Label>
+              <Select
+                value={editDiemDenForm.ten_diem_den}
+                onValueChange={(val) => setEditDiemDenForm({ ...editDiemDenForm, ten_diem_den: val })}
+              >
+                <SelectTrigger id="edit_ten_diem_den" className="w-full">
+                  <SelectValue placeholder="Chọn tỉnh thành..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {TINH_THANH.map((tinh) => (
+                    <SelectItem key={tinh} value={tinh}>
+                      {tinh}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit_ngay_bat_dau" className="mb-2 block">Ngày bắt đầu</Label>
+                <Input
+                  id="edit_ngay_bat_dau"
+                  type="date"
+                  value={editDiemDenForm.ngay_bat_dau}
+                  onChange={(e) => setEditDiemDenForm({ ...editDiemDenForm, ngay_bat_dau: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit_ngay_ket_thuc" className="mb-2 block">Ngày kết thúc</Label>
+                <Input
+                  id="edit_ngay_ket_thuc"
+                  type="date"
+                  value={editDiemDenForm.ngay_ket_thuc}
+                  onChange={(e) => setEditDiemDenForm({ ...editDiemDenForm, ngay_ket_thuc: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="edit_ghi_chu" className="mb-2 block">Ghi chú</Label>
+              <Textarea
+                id="edit_ghi_chu"
+                value={editDiemDenForm.ghi_chu}
+                onChange={(e) => setEditDiemDenForm({ ...editDiemDenForm, ghi_chu: e.target.value })}
+                placeholder="Nhập ghi chú"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowEditDiemDenModal(false)
+                setEditingDiemDen(null)
+                setEditDiemDenForm({
+                  ten_diem_den: "",
+                  ngay_bat_dau: "",
+                  ngay_ket_thuc: "",
+                  ghi_chu: ""
+                })
+              }}
+            >
+              Hủy
+            </Button>
+            <Button
+              onClick={async () => {
+                await handleUpdateDiemDen()
+              }}
+              disabled={isUpdatingDiemDen}
+            >
+              {isUpdatingDiemDen ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Đang cập nhật...
+                </>
+              ) : (
+                <>
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Cập nhật
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal chỉnh sửa lịch trình */}
+      <Dialog open={showEditLichTrinhModal} onOpenChange={(open) => {
+        setShowEditLichTrinhModal(open)
+        if (!open) {
+          setEditingLichTrinh(null)
+          setEditLichTrinhForm({
+            diem_den_id: 0,
+            ngay: "",
+            tieu_de: "",
+            ghi_chu: "",
+            gio_bat_dau: "",
+            gio_ket_thuc: ""
+          })
+        }
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{editingLichTrinh ? "Chỉnh sửa lịch trình" : "Chọn lịch trình cần chỉnh sửa"}</DialogTitle>
+            <DialogDescription>
+              {editingLichTrinh ? "Cập nhật thông tin lịch trình" : "Chọn lịch trình từ danh sách"}
+            </DialogDescription>
+          </DialogHeader>
+          {editingLichTrinh ? (() => {
+            // Tìm điểm đến tương ứng với lịch trình đang chỉnh sửa
+            const diemDenForEdit = diemDenList.find(dd => dd.diem_den_id === editLichTrinhForm.diem_den_id)
+            // Tạo danh sách ngày từ ngày bắt đầu đến ngày kết thúc của điểm đến
+            const availableDatesForEdit = diemDenForEdit && diemDenForEdit.ngay_bat_dau && diemDenForEdit.ngay_ket_thuc
+              ? generateDateList(diemDenForEdit.ngay_bat_dau, diemDenForEdit.ngay_ket_thuc)
+              : []
+
+            return (
+              // Form chỉnh sửa lịch trình
+              <div className="space-y-4 mt-4">
+                <div>
+                  <Label htmlFor="edit_ngay_lich_trinh" className="mb-2 block">Ngày *</Label>
+                  {availableDatesForEdit.length > 0 ? (
+                    <Select
+                      value={editLichTrinhForm.ngay}
+                      onValueChange={(val) => setEditLichTrinhForm({ ...editLichTrinhForm, ngay: val })}
+                    >
+                      <SelectTrigger id="edit_ngay_lich_trinh" className="w-full">
+                        <SelectValue placeholder="Chọn ngày..." />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[300px]">
+                        {availableDatesForEdit.map((date) => {
+                          const dateObj = new Date(date)
+                          const formattedDate = dateObj.toLocaleDateString("vi-VN", {
+                            weekday: "long",
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })
+                          return (
+                            <SelectItem key={date} value={date}>
+                              {formattedDate}
+                            </SelectItem>
+                          )
+                        })}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm items-center text-muted-foreground">
+                      <span>Vui lòng chọn ngày bắt đầu và ngày kết thúc ở điểm đến</span>
+                    </div>
+                  )}
+                  {diemDenForEdit && diemDenForEdit.ngay_bat_dau && diemDenForEdit.ngay_ket_thuc && availableDatesForEdit.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      💡 Chọn ngày từ {new Date(diemDenForEdit.ngay_bat_dau).toLocaleDateString("vi-VN")} đến {new Date(diemDenForEdit.ngay_ket_thuc).toLocaleDateString("vi-VN")}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="edit_tieu_de_lich_trinh" className="mb-2 block">Tiêu đề *</Label>
+                  <Input
+                    id="edit_tieu_de_lich_trinh"
+                    value={editLichTrinhForm.tieu_de}
+                    onChange={(e) => setEditLichTrinhForm({ ...editLichTrinhForm, tieu_de: e.target.value })}
+                    placeholder="Nhập tiêu đề"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="edit_gio_bat_dau_lich_trinh" className="mb-2 block">Giờ bắt đầu</Label>
+                    <Input
+                      id="edit_gio_bat_dau_lich_trinh"
+                      type="time"
+                      value={editLichTrinhForm.gio_bat_dau}
+                      onChange={(e) => setEditLichTrinhForm({ ...editLichTrinhForm, gio_bat_dau: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="edit_gio_ket_thuc_lich_trinh" className="mb-2 block">Giờ kết thúc</Label>
+                    <Input
+                      id="edit_gio_ket_thuc_lich_trinh"
+                      type="time"
+                      value={editLichTrinhForm.gio_ket_thuc}
+                      onChange={(e) => setEditLichTrinhForm({ ...editLichTrinhForm, gio_ket_thuc: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="edit_ghi_chu_lich_trinh" className="mb-2 block">Ghi chú</Label>
+                  <Textarea
+                    id="edit_ghi_chu_lich_trinh"
+                    value={editLichTrinhForm.ghi_chu}
+                    onChange={(e) => setEditLichTrinhForm({ ...editLichTrinhForm, ghi_chu: e.target.value })}
+                    placeholder="Nhập ghi chú"
+                    rows={3}
+                  />
+                </div>
+              </div>
+            )
+          })() : (
+            // Danh sách lịch trình
+            <div className="space-y-4 mt-4">
+              {lichTrinhList.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  Chưa có lịch trình nào để chỉnh sửa
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  {lichTrinhList.map((lt) => {
+                    const diemDen = diemDenList.find(dd => dd.diem_den_id === lt.diem_den_id)
+                    return (
+                      <Card key={lt.lich_trinh_id} className="cursor-pointer hover:bg-muted/50 transition-colors">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <h4 className="font-semibold">{lt.tieu_de}</h4>
+                              <div className="flex items-center gap-4 text-sm text-muted-foreground mt-2">
+                                {diemDen && (
+                                  <span className="flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" />
+                                    {diemDen.ten_diem_den}
+                                  </span>
+                                )}
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {new Date(lt.ngay).toLocaleDateString("vi-VN")}
+                                </span>
+                                {lt.gio_bat_dau && lt.gio_ket_thuc && (
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    {lt.gio_bat_dau} - {lt.gio_ket_thuc}
+                                  </span>
+                                )}
+                              </div>
+                              {lt.ghi_chu && (
+                                <p className="text-sm text-muted-foreground mt-2">{lt.ghi_chu}</p>
+                              )}
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditingLichTrinh(lt)
+                                setEditLichTrinhForm({
+                                  diem_den_id: lt.diem_den_id,
+                                  ngay: lt.ngay,
+                                  tieu_de: lt.tieu_de,
+                                  ghi_chu: lt.ghi_chu,
+                                  gio_bat_dau: lt.gio_bat_dau,
+                                  gio_ket_thuc: lt.gio_ket_thuc
+                                })
+                              }}
+                            >
+                              <Pencil className="h-4 w-4 mr-2" />
+                              Chỉnh sửa
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            {editingLichTrinh ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setEditingLichTrinh(null)
+                    setEditLichTrinhForm({
                       diem_den_id: 0,
                       ngay: "",
                       tieu_de: "",
@@ -2512,7 +3638,252 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                       gio_bat_dau: "",
                       gio_ket_thuc: ""
                     })
-                    setChiPhiForm({
+                  }}
+                >
+                  Quay lại
+                </Button>
+                <Button
+                  onClick={async () => {
+                    await handleUpdateLichTrinh()
+                  }}
+                  disabled={isUpdatingLichTrinh}
+                >
+                  {isUpdatingLichTrinh ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Đang cập nhật...
+                    </>
+                  ) : (
+                    <>
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Cập nhật
+                    </>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => setShowEditLichTrinhModal(false)}
+              >
+                Đóng
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal chỉnh sửa chi phí */}
+      <Dialog open={showEditChiPhiModal} onOpenChange={(open) => {
+        setShowEditChiPhiModal(open)
+        if (!open) {
+          setEditingChiPhi(null)
+          setEditChiPhiForm({
+            diem_den_id: 0,
+            lich_trinh_id: 0,
+            nguoi_chi_id: 0,
+            nguoi_chi_ten: "",
+            so_tien: 0,
+            mo_ta: "",
+            nhom: "",
+            ngay: ""
+          })
+        }
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{editingChiPhi ? "Chỉnh sửa chi phí" : "Chọn chi phí cần chỉnh sửa"}</DialogTitle>
+            <DialogDescription>
+              {editingChiPhi ? "Cập nhật thông tin chi phí" : "Chọn chi phí từ danh sách"}
+            </DialogDescription>
+          </DialogHeader>
+          {editingChiPhi ? (() => {
+            // Tìm điểm đến tương ứng
+            const diemDenForEdit = diemDenList.find(dd => dd.diem_den_id === editChiPhiForm.diem_den_id)
+            // Tạo danh sách ngày từ ngày bắt đầu đến ngày kết thúc của điểm đến
+            const availableDatesForEdit = diemDenForEdit && diemDenForEdit.ngay_bat_dau && diemDenForEdit.ngay_ket_thuc
+              ? generateDateList(diemDenForEdit.ngay_bat_dau, diemDenForEdit.ngay_ket_thuc)
+              : []
+
+            return (
+              // Form chỉnh sửa chi phí
+              <div className="space-y-4 mt-4">
+                <div>
+                  <Label htmlFor="edit_diem_den_chi_phi" className="mb-2 block">Điểm đến *</Label>
+                  {diemDenForEdit ? (
+                    <div className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm items-center">
+                      <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
+                      <span className="font-medium text-foreground">{diemDenForEdit.ten_diem_den}</span>
+                    </div>
+                  ) : (
+                    <div className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm items-center text-muted-foreground">
+                      <span>Không tìm thấy điểm đến</span>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    💡 Điểm đến không thể chỉnh sửa
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="edit_ngay_chi_phi" className="mb-2 block">Ngày *</Label>
+                  {availableDatesForEdit.length > 0 ? (
+                    <Select
+                      value={editChiPhiForm.ngay}
+                      onValueChange={(val) => setEditChiPhiForm({ ...editChiPhiForm, ngay: val })}
+                    >
+                      <SelectTrigger id="edit_ngay_chi_phi" className="w-full">
+                        <SelectValue placeholder="Chọn ngày..." />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[300px]">
+                        {availableDatesForEdit.map((date) => {
+                          const dateObj = new Date(date)
+                          const formattedDate = dateObj.toLocaleDateString("vi-VN", {
+                            weekday: "long",
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })
+                          return (
+                            <SelectItem key={date} value={date}>
+                              {formattedDate}
+                            </SelectItem>
+                          )
+                        })}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm items-center text-muted-foreground">
+                      <span>Vui lòng chọn ngày bắt đầu và ngày kết thúc ở điểm đến</span>
+                    </div>
+                  )}
+                  {diemDenForEdit && diemDenForEdit.ngay_bat_dau && diemDenForEdit.ngay_ket_thuc && availableDatesForEdit.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      💡 Chọn ngày từ {new Date(diemDenForEdit.ngay_bat_dau).toLocaleDateString("vi-VN")} đến {new Date(diemDenForEdit.ngay_ket_thuc).toLocaleDateString("vi-VN")}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="edit_so_tien_chi_phi" className="mb-2 block">Số tiền *</Label>
+                  <Input
+                    id="edit_so_tien_chi_phi"
+                    type="number"
+                    value={editChiPhiForm.so_tien || ""}
+                    onChange={(e) => setEditChiPhiForm({ ...editChiPhiForm, so_tien: parseFloat(e.target.value) || 0 })}
+                    placeholder="Nhập số tiền"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_mo_ta_chi_phi" className="mb-2 block">Mô tả *</Label>
+                  <Input
+                    id="edit_mo_ta_chi_phi"
+                    value={editChiPhiForm.mo_ta}
+                    onChange={(e) => setEditChiPhiForm({ ...editChiPhiForm, mo_ta: e.target.value })}
+                    placeholder="Nhập mô tả"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit_nhom_chi_phi" className="mb-2 block">Nhóm *</Label>
+                  <select
+                    id="edit_nhom_chi_phi"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={editChiPhiForm.nhom}
+                    onChange={(e) => setEditChiPhiForm({ ...editChiPhiForm, nhom: e.target.value })}
+                    required
+                  >
+                    <option value="">Chọn nhóm</option>
+                    {expenseTypes.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {type.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )
+          })() : (
+            // Danh sách chi phí
+            <div className="space-y-4 mt-4">
+              {chiPhiList.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">
+                  Chưa có chi phí nào để chỉnh sửa
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  {chiPhiList.map((cp) => {
+                    const diemDen = diemDenList.find(dd => dd.diem_den_id === cp.diem_den_id)
+                    const lichTrinh = cp.lich_trinh_id ? lichTrinhList.find(lt => lt.lich_trinh_id === cp.lich_trinh_id) : null
+                    return (
+                      <Card key={cp.chi_phi_id} className="cursor-pointer hover:bg-muted/50 transition-colors">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-semibold">{cp.mo_ta}</h4>
+                                {cp.nhom && (
+                                  <Badge variant="secondary" className="text-xs">{cp.nhom}</Badge>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-4 text-sm text-muted-foreground mt-2">
+                                {diemDen && (
+                                  <span className="flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" />
+                                    {diemDen.ten_diem_den}
+                                  </span>
+                                )}
+                                {cp.ngay && (
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    {new Date(cp.ngay).toLocaleDateString("vi-VN")}
+                                  </span>
+                                )}
+                                {lichTrinh && (
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    {lichTrinh.tieu_de}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm font-bold text-primary mt-2">
+                                {formatCurrency(cp.so_tien)} VNĐ
+                              </p>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditingChiPhi(cp)
+                                setEditChiPhiForm({
+                                  diem_den_id: cp.diem_den_id,
+                                  lich_trinh_id: cp.lich_trinh_id || 0,
+                                  nguoi_chi_id: cp.nguoi_chi_id,
+                                  nguoi_chi_ten: cp.nguoi_chi_ten,
+                                  so_tien: cp.so_tien,
+                                  mo_ta: cp.mo_ta,
+                                  nhom: cp.nhom,
+                                  ngay: cp.ngay
+                                })
+                              }}
+                            >
+                              <Pencil className="h-4 w-4 mr-2" />
+                              Chỉnh sửa
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            {editingChiPhi ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setEditingChiPhi(null)
+                    setEditChiPhiForm({
                       diem_den_id: 0,
                       lich_trinh_id: 0,
                       nguoi_chi_id: 0,
@@ -2522,15 +3893,83 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                       nhom: "",
                       ngay: ""
                     })
-                  }
-                }}>
-                  Tiếp theo
+                  }}
+                >
+                  Quay lại
                 </Button>
-              </DialogFooter>
-            </TabsContent>
-          </Tabs>
+                <Button
+                  onClick={async () => {
+                    await handleUpdateChiPhi()
+                  }}
+                  disabled={isUpdatingChiPhi}
+                >
+                  {isUpdatingChiPhi ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Đang cập nhật...
+                    </>
+                  ) : (
+                    <>
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Cập nhật
+                    </>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => setShowEditChiPhiModal(false)}
+              >
+                Đóng
+              </Button>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog xác nhận xóa điểm đến */}
+      <AlertDialog open={showDeleteDiemDenDialog} onOpenChange={setShowDeleteDiemDenDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Xác nhận xóa điểm đến
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc chắn muốn xóa điểm đến <span className="font-semibold">"{deletingDiemDen?.ten_diem_den}"</span>? 
+              Tất cả lịch trình và chi phí liên quan đến điểm đến này cũng sẽ bị xóa. Hành động này không thể hoàn tác.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setShowDeleteDiemDenDialog(false)
+              setDeletingDiemDen(null)
+            }}>
+              Hủy
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                await handleDeleteDiemDen()
+              }}
+              disabled={isDeletingDiemDen}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeletingDiemDen ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Đang xóa...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Xóa
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

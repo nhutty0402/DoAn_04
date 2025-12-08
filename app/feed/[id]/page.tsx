@@ -965,7 +965,7 @@ export default function PublicTripDetailPage() {
           {/* Sidebar */}
           <div className="space-y-6">
             {/* Owner Info */}
-            <Card>
+            {/* <Card>
               <CardHeader>
                 <CardTitle>Người tạo</CardTitle>
               </CardHeader>
@@ -977,21 +977,60 @@ export default function PublicTripDetailPage() {
                   </Avatar>
                   <div>
                     <h4 className="font-semibold">{trip.owner.name}</h4>
-                    {/* <div className="flex items-center gap-1">
-                      <Star className="h-4 w-4 text-yellow-400 fill-current" />
-                      <span className="text-sm text-gray-600">{trip.rating}</span>
-                    </div> */}
                   </div>
                 </div>
                 <p className="text-sm text-gray-600 mb-4 line-clamp-4">{trip.owner.bio}</p>
-                {/* <Button
-                  variant="outline"
-                  className="w-full border-blue-200 text-blue-600 hover:bg-blue-50 bg-transparent"
-                >
-                  Xem thêm chuyến đi
-                </Button> */}
               </CardContent>
-            </Card>
+            </Card> */}
+
+            {/* Người đã chi tiền */}
+            {trip.expenseDetails && trip.expenseDetails.length > 0 && (() => {
+              // Lấy danh sách unique những người đã chi tiền
+              const uniqueSpenders = Array.from(
+                new Map(
+                  trip.expenseDetails
+                    .filter((detail) => detail.nguoi_chi && detail.avatar_url)
+                    .map((detail) => [
+                      detail.nguoi_chi,
+                      {
+                        name: detail.nguoi_chi,
+                        avatar: detail.avatar_url,
+                      },
+                    ])
+                ).values()
+              )
+              
+              if (uniqueSpenders.length === 0) return null
+
+              return (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Chủ chuyến đi</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {uniqueSpenders.map((spender, index) => (
+                        <div key={index} className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage 
+                              src={spender.avatar || DEFAULT_AVATAR} 
+                              alt={spender.name || "Người dùng"} 
+                            />
+                            <AvatarFallback>
+                              {(spender.name || "N")[0].toUpperCase()}
+                            </AvatarFallback>
+                            
+                          </Avatar>
+                          <div className="flex-1">
+                            <h4 className="font-medium text-sm">{spender.name || "Người dùng"}</h4>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })()}
 
             {/* hành động */}
             {/* <Card>

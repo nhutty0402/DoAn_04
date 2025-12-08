@@ -17,6 +17,7 @@ interface Message {
 
 export function ChatbotWidget() {
   const [isOpen, setIsOpen] = useState(false)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome-1",
@@ -33,6 +34,26 @@ export function ChatbotWidget() {
 
   const chatRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  // Kiểm tra đăng nhập
+  useEffect(() => {
+    const checkAuth = () => {
+      const token = Cookies.get("token")
+      if (token && token !== "null" && token !== "undefined") {
+        setIsAuthenticated(true)
+      } else {
+        setIsAuthenticated(false)
+      }
+    }
+
+    // Kiểm tra ngay khi component mount
+    checkAuth()
+
+    // Kiểm tra định kỳ để cập nhật khi token thay đổi
+    const interval = setInterval(checkAuth, 1000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   // Quick suggestions
   const suggestions = [
@@ -198,13 +219,21 @@ export function ChatbotWidget() {
     )
   }
 
+  // Chỉ hiển thị chatbot nếu đã đăng nhập
+  if (!isAuthenticated) {
+    return null
+  }
+
   return (
     <>
       {/* Floating Button */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-all hover:scale-110 flex items-center justify-center animate-in fade-in slide-in-from-bottom-4 duration-300"
+          className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-xl hover:bg-primary/90 transition-all hover:scale-105 flex items-center justify-center border-2 border-background/50"
+          style={{
+            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.1)",
+          }}
           aria-label="Mở chatbot"
         >
           <MessageCircle className="h-6 w-6" />
@@ -213,9 +242,14 @@ export function ChatbotWidget() {
 
       {/* Chat Window */}
       {isOpen && (
-        <div className="fixed bottom-6 right-6 z-50 w-[400px] h-[600px] max-w-[calc(100vw-3rem)] max-h-[calc(100vh-3rem)] sm:w-[400px] sm:h-[600px] flex flex-col bg-card border border-border rounded-2xl overflow-hidden shadow-2xl">
+        <div 
+          className="fixed bottom-6 right-6 z-50 w-[400px] h-[600px] max-w-[calc(100vw-3rem)] max-h-[calc(100vh-3rem)] sm:w-[400px] sm:h-[600px] flex flex-col bg-card border-2 border-border rounded-2xl overflow-hidden shadow-2xl"
+          style={{
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.05)",
+          }}
+        >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-muted/50">
+          <div className="flex items-center justify-between border-b-2 border-border px-4 py-3 bg-muted/80">
             <div className="flex items-center gap-3">
               <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-white text-lg shadow-md">
                 ✈️
@@ -248,7 +282,7 @@ export function ChatbotWidget() {
           {/* Chat body */}
           <div
             ref={chatRef}
-            className="flex-1 overflow-y-auto px-4 py-3 bg-muted/30"
+            className="flex-1 overflow-y-auto px-4 py-3 bg-background"
           >
             {messages.map(renderMessage)}
 
@@ -265,13 +299,13 @@ export function ChatbotWidget() {
           </div>
 
           {/* Quick Suggestions */}
-          <div className="px-3 py-2 bg-muted/50 border-t border-border">
+          <div className="px-3 py-2 bg-muted/80 border-t-2 border-border">
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
               {suggestions.map((s, i) => (
                 <button
                   key={i}
                   onClick={() => handleSend(s)}
-                  className="flex-shrink-0 bg-background text-foreground text-xs px-3 py-1.5 rounded-xl border border-border hover:bg-muted transition shadow-sm"
+                  className="flex-shrink-0 bg-background text-foreground text-xs px-3 py-1.5 rounded-xl border border-border hover:bg-muted hover:border-primary/50 transition shadow-sm"
                 >
                   {s}
                 </button>
@@ -280,11 +314,11 @@ export function ChatbotWidget() {
           </div>
 
           {/* Input */}
-          <div className="border-t border-border bg-muted/50 px-3 py-2">
+          <div className="border-t-2 border-border bg-muted/80 px-3 py-2">
             <div className="flex items-end gap-2">
               <textarea
                 ref={inputRef}
-                className="flex-1 resize-none rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring h-12 max-h-32"
+                className="flex-1 resize-none rounded-2xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary h-12 max-h-32 shadow-sm"
                 placeholder="Nhập câu hỏi du lịch của bạn..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -295,7 +329,7 @@ export function ChatbotWidget() {
                 onClick={() => handleSend()}
                 disabled={isLoading || !input.trim()}
                 size="icon"
-                className="h-10 w-10 rounded-2xl"
+                className="h-10 w-10 rounded-2xl shadow-md"
               >
                 {isLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

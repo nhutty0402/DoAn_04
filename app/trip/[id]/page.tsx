@@ -299,11 +299,17 @@ export default function TripDetailPage({ params }: { params: Promise<{ id: strin
                                                     ? `${new Date(trip.ngay_bat_dau).toLocaleDateString("vi-VN")} - ${new Date(trip.ngay_ket_thuc).toLocaleDateString("vi-VN")}`
                                                     : "Chưa xác định"}
                                             </p>
-                                            {trip.ngay_bat_dau && trip.ngay_ket_thuc && (
-                                                <p className="text-xs text-muted-foreground mt-1">
-                                                    Tổng cộng <span className="font-bold text-primary">335 ngày</span>
-                                                </p>
-                                            )}
+                                            {trip.ngay_bat_dau && trip.ngay_ket_thuc && (() => {
+                                                const startDate = new Date(trip.ngay_bat_dau)
+                                                const endDate = new Date(trip.ngay_ket_thuc)
+                                                const diffTime = Math.abs(endDate.getTime() - startDate.getTime())
+                                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1 // +1 để bao gồm cả ngày đầu và ngày cuối
+                                                return (
+                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                        Tổng cộng <span className="font-bold text-primary">{diffDays} ngày</span>
+                                                    </p>
+                                                )
+                                            })()}
                                         </div>
                                     </div>
 

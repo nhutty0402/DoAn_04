@@ -8,10 +8,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Bell, X, Check, MapPin, DollarSign, Users, MessageCircle, Calendar, Loader2, UserPlus } from "lucide-react"
+import { Bell, X, Check, MapPin, DollarSign, Users, MessageCircle, Calendar, Loader2, UserPlus, Eye, Flag } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useToast } from "@/hooks/use-toast"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface Notification {
   id: string
@@ -37,6 +41,19 @@ interface Invitation {
   tao_luc: string
 }
 
+interface Complaint {
+  bao_cao_id: number
+  chuyen_di_id: number
+  ten_chuyen_di: string
+  ly_do: string
+  trang_thai: number // 0: chờ xử lý, 1: đã xử lý
+  phan_hoi_cua_admin?: string | null
+  tao_luc: string
+  cap_nhat_luc: string
+  ten_admin_phan_hoi?: string | null
+  trang_thai_text: string
+}
+
 interface NotificationCenterProps {
   isOpen: boolean
   onClose: () => void
@@ -45,8 +62,18 @@ interface NotificationCenterProps {
 export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [invitations, setInvitations] = useState<Invitation[]>([])
+  const [complaints, setComplaints] = useState<Complaint[]>([])
   const [loading, setLoading] = useState(false)
   const [invitationsLoading, setInvitationsLoading] = useState(false)
+  const [complaintsLoading, setComplaintsLoading] = useState(false)
+  const [showComplaintDialog, setShowComplaintDialog] = useState(false)
+  const [selectedTripIdForComplaint, setSelectedTripIdForComplaint] = useState<string | null>(null)
+  const [complaintLyDo, setComplaintLyDo] = useState<string>("")
+  const [isSubmittingComplaint, setIsSubmittingComplaint] = useState(false)
+  const [activeTab, setActiveTab] = useState<string>("thong-bao")
+  const [showComplaintDetailDialog, setShowComplaintDetailDialog] = useState(false)
+  const [complaintDetail, setComplaintDetail] = useState<any>(null)
+  const [complaintDetailLoading, setComplaintDetailLoading] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
 
@@ -228,6 +255,71 @@ export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps)
     }
   }
 
+  // Fetch complaints from API
+  const fetchComplaints = async () => {
+    setComplaintsLoading(true)
+    try {
+      const token = Cookies.get("token")
+      
+      if (!token || token === "null" || token === "undefined") {
+        console.warn("Không có token → chuyển về /login")
+        router.replace("/login")
+        return
+      }
+
+      const response = await axios.get(
+        "https://travel-planner-imdw.onrender.com/api/chuyen-di/khieu-nai",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      // Map API response to component format
+      const apiData = response.data?.danh_sach || []
+      console.log("📋 API complaints response:", response.data)
+      console.log("📋 Danh sách khiếu nại:", apiData)
+      
+      const mappedComplaints: Complaint[] = apiData.map((item: any) => ({
+        bao_cao_id: item.bao_cao_id || 0,
+        chuyen_di_id: item.chuyen_di_id || 0,
+        ten_chuyen_di: item.ten_chuyen_di || "Chuyến đi không xác định",
+        ly_do: item.ly_do || "",
+        trang_thai: item.trang_thai || 0,
+        phan_hoi_cua_admin: item.phan_hoi_cua_admin || null,
+        tao_luc: item.tao_luc || "",
+        cap_nhat_luc: item.cap_nhat_luc || "",
+        ten_admin_phan_hoi: item.ten_admin_phan_hoi || null,
+        trang_thai_text: item.trang_thai_text || "",
+      }))
+
+      setComplaints(mappedComplaints)
+    } catch (error: any) {
+      console.error("❌ Lỗi khi tải khiếu nại:", error)
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        toast({
+          title: "Lỗi xác thực",
+          description: "Phiên đăng nhập đã hết hạn",
+          variant: "destructive",
+        })
+        router.replace("/login")
+      } else {
+        // Không hiển thị toast nếu không có khiếu nại nào
+        if (error.response?.status !== 404) {
+          toast({
+            title: "Lỗi",
+            description: error.response?.data?.message || error.message || "Không thể tải danh sách khiếu nại",
+            variant: "destructive",
+          })
+        }
+      }
+    } finally {
+      setComplaintsLoading(false)
+    }
+  }
+
   // Fetch notifications from API
   useEffect(() => {
     if (!isOpen) return
@@ -254,16 +346,58 @@ export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps)
         // Backend trả về: { message, tong_so, chua_doc, danh_sach: [...] }
         // Backend đã sắp xếp ORDER BY tao_luc DESC rồi
         const apiData = response.data?.danh_sach || []
-        const mappedNotifications: Notification[] = apiData.map((item: any, index: number) => ({
-          id: item.thong_bao_id ? String(item.thong_bao_id) : `notification-${index}-${Date.now()}`,
-          type: mapLoaiToType(item.loai || ""),
-          title: generateTitle(item.loai || ""),
-          message: item.noi_dung || "",
-          timestamp: item.tao_luc || "",
-          read: Boolean(item.da_xem),
-          tripId: item.lien_ket || undefined,
-          tripName: undefined, // API không có tripName, có thể cần gọi thêm API nếu cần
-        }))
+        console.log("📋 API thông báo response:", apiData)
+        
+        const mappedNotifications: Notification[] = apiData.map((item: any, index: number) => {
+          // Ưu tiên lấy chuyen_di_id trực tiếp từ API nếu có
+          let tripId: string | undefined = undefined
+          
+          // Nếu có chuyen_di_id trực tiếp trong response
+          if (item.chuyen_di_id) {
+            tripId = String(item.chuyen_di_id)
+          } 
+          // Nếu không có, thử extract từ lien_ket
+          else if (item.lien_ket) {
+            tripId = item.lien_ket
+            if (typeof tripId === "string") {
+              // Nếu là đường dẫn, extract ID
+              if (tripId.includes("/")) {
+                const parts = tripId.split("/").filter(p => p) // Loại bỏ phần rỗng
+                // Tìm phần chứa số (có thể là ID)
+                for (let i = parts.length - 1; i >= 0; i--) {
+                  const part = parts[i]
+                  // Nếu phần này là số hoặc chứa số, có thể là ID
+                  if (/^\d+$/.test(part)) {
+                    tripId = part
+                    break
+                  }
+                }
+                // Nếu không tìm thấy số, lấy phần cuối cùng
+                if (tripId === item.lien_ket && parts.length > 0) {
+                  tripId = parts[parts.length - 1]
+                }
+              }
+            }
+          }
+          
+          console.log(`📋 Notification ${index}:`, {
+            loai: item.loai,
+            lien_ket: item.lien_ket,
+            chuyen_di_id: item.chuyen_di_id,
+            extractedTripId: tripId
+          })
+          
+          return {
+            id: item.thong_bao_id ? String(item.thong_bao_id) : `notification-${index}-${Date.now()}`,
+            type: mapLoaiToType(item.loai || ""),
+            title: generateTitle(item.loai || ""),
+            message: item.noi_dung || "",
+            timestamp: item.tao_luc || "",
+            read: Boolean(item.da_xem),
+            tripId: tripId,
+            tripName: undefined, // API không có tripName, có thể cần gọi thêm API nếu cần
+          }
+        })
 
         setNotifications(mappedNotifications)
       } catch (error: any) {
@@ -289,6 +423,7 @@ export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps)
 
     fetchNotifications()
     fetchInvitations()
+    fetchComplaints()
   }, [isOpen, router, toast])
 
   const unreadCount = notifications.filter((n) => !n.read).length + invitations.length
@@ -376,6 +511,205 @@ export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps)
     setNotifications((prev) => prev.filter((notif) => notif.id !== notificationId))
   }
 
+  // Kiểm tra nếu notification là về chuyến đi bị ẩn
+  const isHiddenTripNotification = (notification: Notification) => {
+    return (
+      notification.type === "trip" &&
+      notification.tripId &&
+      (notification.message.toLowerCase().includes("ẩn") ||
+        notification.message.toLowerCase().includes("bị ẩn") ||
+        notification.message.toLowerCase().includes("đã ẩn"))
+    )
+  }
+
+  // Xử lý xem chi tiết chuyến đi
+  const handleViewTripDetail = (tripId: string) => {
+    router.push(`/trip/${tripId}`)
+    onClose()
+  }
+
+  // Xử lý xem chi tiết khiếu nại
+  const handleViewComplaintDetail = async (baoCaoId: number) => {
+    setComplaintDetailLoading(true)
+    setShowComplaintDetailDialog(true)
+    try {
+      const token = Cookies.get("token")
+      
+      if (!token || token === "null" || token === "undefined") {
+        toast({
+          title: "Lỗi xác thực",
+          description: "Vui lòng đăng nhập",
+          variant: "destructive",
+        })
+        router.replace("/login")
+        return
+      }
+
+      const response = await axios.get(
+        `https://travel-planner-imdw.onrender.com/api/chuyen-di/khieu-nai/${baoCaoId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      console.log("📋 Chi tiết khiếu nại:", response.data)
+      setComplaintDetail(response.data?.chi_tiet || null)
+    } catch (error: any) {
+      console.error("❌ Lỗi khi tải chi tiết khiếu nại:", error)
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        toast({
+          title: "Lỗi xác thực",
+          description: "Phiên đăng nhập đã hết hạn",
+          variant: "destructive",
+        })
+        router.replace("/login")
+      } else {
+        toast({
+          title: "Lỗi",
+          description: error.response?.data?.message || error.message || "Không thể tải chi tiết khiếu nại",
+          variant: "destructive",
+        })
+      }
+      setShowComplaintDetailDialog(false)
+    } finally {
+      setComplaintDetailLoading(false)
+    }
+  }
+
+  // Xử lý đóng dialog chi tiết khiếu nại
+  const handleCloseComplaintDetailDialog = () => {
+    setShowComplaintDetailDialog(false)
+    setComplaintDetail(null)
+  }
+
+  // Xử lý mở dialog khiếu nại
+  const handleOpenComplaintDialog = (tripId: string) => {
+    // Extract ID từ tripId nếu nó là đường dẫn (ví dụ: "/trip/123" -> "123")
+    let extractedId = tripId
+    if (tripId.includes("/")) {
+      // Nếu là đường dẫn, lấy phần cuối cùng
+      extractedId = tripId.split("/").pop() || tripId
+    }
+    console.log("🔍 Original tripId:", tripId)
+    console.log("🔍 Extracted ID:", extractedId)
+    setSelectedTripIdForComplaint(extractedId)
+    setComplaintLyDo("")
+    setShowComplaintDialog(true)
+  }
+
+  // Xử lý đóng dialog khiếu nại
+  const handleCloseComplaintDialog = () => {
+    setShowComplaintDialog(false)
+    setSelectedTripIdForComplaint(null)
+    setComplaintLyDo("")
+  }
+
+  // Xử lý gửi khiếu nại
+  const handleSubmitComplaint = async () => {
+    if (!selectedTripIdForComplaint) return
+    if (!complaintLyDo.trim()) {
+      toast({
+        title: "Lỗi",
+        description: "Vui lòng nhập lý do khiếu nại",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const token = Cookies.get("token")
+    if (!token || token === "null" || token === "undefined") {
+      toast({
+        title: "Lỗi xác thực",
+        description: "Vui lòng đăng nhập để gửi khiếu nại",
+        variant: "destructive",
+      })
+      router.replace("/login")
+      return
+    }
+
+    setIsSubmittingComplaint(true)
+    try {
+      // Đảm bảo selectedTripIdForComplaint có giá trị
+      if (!selectedTripIdForComplaint) {
+        toast({
+          title: "Lỗi",
+          description: "Không tìm thấy ID chuyến đi",
+          variant: "destructive",
+        })
+        setIsSubmittingComplaint(false)
+        return
+      }
+
+      // Extract ID nếu cần (trường hợp chưa extract ở handleOpenComplaintDialog)
+      let tripId = selectedTripIdForComplaint
+      if (tripId.includes("/")) {
+        tripId = tripId.split("/").pop() || tripId
+      }
+
+      console.log("🔍 Gửi khiếu nại với tripId:", tripId)
+      console.log("🔍 Lý do:", complaintLyDo.trim())
+      
+      const apiUrl = `https://travel-planner-imdw.onrender.com/api/chuyen-di/${tripId}/khieu-nai`
+      console.log("🌐 API URL:", apiUrl)
+
+      const response = await axios.post(
+        apiUrl,
+        {
+          ly_do: complaintLyDo.trim(),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      console.log("✅ API Response:", response.data)
+
+      toast({
+        title: "Thành công",
+        description: response.data.message || "Khiếu nại đã được gửi. Chúng tôi sẽ kiểm tra và xử lý sớm.",
+      })
+      handleCloseComplaintDialog()
+    } catch (error: any) {
+      console.error("Lỗi khi gửi khiếu nại:", error)
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          toast({
+            title: "Lỗi xác thực",
+            description: "Phiên đăng nhập đã hết hạn",
+            variant: "destructive",
+          })
+          router.replace("/login")
+        } else if (error.response?.status === 409) {
+          toast({
+            title: "Lỗi",
+            description: error.response?.data?.message || "Bạn đã gửi khiếu nại tương tự và đang chờ xử lý.",
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "Lỗi",
+            description: error.response?.data?.message || "Có lỗi xảy ra khi gửi khiếu nại",
+            variant: "destructive",
+          })
+        }
+      } else {
+        toast({
+          title: "Lỗi",
+          description: "Có lỗi xảy ra khi gửi khiếu nại",
+          variant: "destructive",
+        })
+      }
+    } finally {
+      setIsSubmittingComplaint(false)
+    }
+  }
+
   if (!isOpen) return null
 
   return (
@@ -401,16 +735,39 @@ export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps)
                   </Badge>
                 )}
               </CardTitle>
-            </div>
-            {unreadCount > 0 && (
-              <Button variant="ghost" size="sm" onClick={markAllAsRead} className="text-primary hover:text-primary/80">
-                <Check className="h-4 w-4 mr-1" />
-                Đánh dấu tất cả
-              </Button>
-            )}
+              </div>
+ 
+              {/* Tabs Navigation và Đánh dấu tất cả */}
+              <div className="mt-3 flex items-center justify-between">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-auto">
+                  <TabsList className="inline-flex h-7 items-center justify-center rounded-full bg-muted p-0.5 w-auto gap-0.5">
+                    <TabsTrigger 
+                      value="thong-bao" 
+                      className="px-3 py-1 text-[11px] font-medium transition-all rounded-full data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground"
+                    >
+                      Thông báo
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="khieu-nai" 
+                      className="px-3 py-1 text-[11px] font-medium transition-all rounded-full data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-foreground"
+                    >
+                      Đã khiếu nại
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                {unreadCount > 0 && activeTab === "thong-bao" && (
+                  <Button variant="ghost" size="sm" onClick={markAllAsRead} className="text-primary hover:text-primary/80">
+                    <Check className="h-4 w-4 mr-1" />
+                    Đánh dấu tất cả
+                  </Button>
+                )}
+              </div>
+           
           </CardHeader>
           <CardContent className="p-0">
-            <ScrollArea className="h-[500px]">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsContent value="thong-bao" className="mt-0">
+                <ScrollArea className="h-[500px]">
               <div className="space-y-1">
                 <AnimatePresence>
                   {loading || invitationsLoading ? (
@@ -493,63 +850,352 @@ export function NotificationCenter({ isOpen, onClose }: NotificationCenterProps)
                       ))}
 
                       {/* Regular Notifications */}
-                      {notifications.map((notification) => (
-                        <motion.div
-                          key={notification.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: 20 }}
-                          className={`p-4 border-b border-border hover:bg-muted/30 cursor-pointer transition-colors group ${
-                            !notification.read ? "bg-primary/5 border-l-4 border-l-primary" : ""
-                          }`}
-                          onClick={() => !notification.read && markAsRead(notification.id)}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="flex-shrink-0 mt-1">{getNotificationIcon(notification.type)}</div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <h4 className="text-sm font-semibold text-foreground mb-1">{notification.title}</h4>
-                                  <p className="text-sm text-muted-foreground font-[family-name:var(--font-dm-sans)] mb-2">
-                                    {notification.message}
-                                  </p>
-                                  <div className="flex items-center gap-2">
-                                    {notification.tripName && (
-                                    <Badge variant="outline" className="text-xs">
-                                      {notification.tripName}
-                                    </Badge>
+                      {notifications.map((notification) => {
+                        const isHiddenTrip = isHiddenTripNotification(notification)
+                        return (
+                          <motion.div
+                            key={notification.id}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 20 }}
+                            className={`p-4 border-b border-border hover:bg-muted/30 cursor-pointer transition-colors group ${
+                              !notification.read ? "bg-primary/5 border-l-4 border-l-primary" : ""
+                            }`}
+                            onClick={() => !notification.read && markAsRead(notification.id)}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="flex-shrink-0 mt-1">{getNotificationIcon(notification.type)}</div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <h4 className="text-sm font-semibold text-foreground mb-1">{notification.title}</h4>
+                                    <p className="text-sm text-muted-foreground font-[family-name:var(--font-dm-sans)] mb-2">
+                                      {notification.message}
+                                    </p>
+                                    <div className="flex items-center gap-2 mb-2">
+                                      {notification.tripName && (
+                                        <Badge variant="outline" className="text-xs">
+                                          {notification.tripName}
+                                        </Badge>
+                                      )}
+                                      <span className="text-xs text-muted-foreground">
+                                        {formatTime(notification.timestamp)}
+                                      </span>
+                                    </div>
+                                    {/* Hiển thị nút nếu là thông báo chuyến đi bị ẩn */}
+                                    {isHiddenTrip && notification.tripId && (
+                                      <div className="flex items-center gap-2 mt-3">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            console.log("🔍 Click gửi khiếu nại, notification:", {
+                                              id: notification.id,
+                                              tripId: notification.tripId,
+                                              message: notification.message,
+                                              title: notification.title
+                                            })
+                                            if (notification.tripId) {
+                                              handleOpenComplaintDialog(notification.tripId)
+                                            } else {
+                                              toast({
+                                                title: "Lỗi",
+                                                description: "Không tìm thấy ID chuyến đi trong thông báo",
+                                                variant: "destructive",
+                                              })
+                                            }
+                                          }}
+                                          className="h-8 text-xs"
+                                        >
+                                          <Flag className="h-3 w-3 mr-1" />
+                                          Gửi khiếu nại
+                                        </Button>
+                                      </div>
                                     )}
-                                    <span className="text-xs text-muted-foreground">
-                                      {formatTime(notification.timestamp)}
-                                    </span>
                                   </div>
                                 </div>
-                                {/* nút X */}
-                                {/* <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    deleteNotification(notification.id)
-                                  }}
-                                >
-                                  <X className="h-3 w-3" />
-                                </Button> */}
                               </div>
+                              {!notification.read && <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0 mt-2" />}
                             </div>
-                            {!notification.read && <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0 mt-2" />}
-                          </div>
-                        </motion.div>
-                      ))}
+                          </motion.div>
+                        )
+                      })}
                     </>
                   )}
                 </AnimatePresence>
               </div>
             </ScrollArea>
+              </TabsContent>
+              
+              <TabsContent value="khieu-nai" className="mt-0">
+                <ScrollArea className="h-[500px]">
+                  <div className="space-y-1">
+                    <AnimatePresence>
+                      {complaintsLoading ? (
+                        <div className="text-center py-12">
+                          <Loader2 className="h-12 w-12 text-primary mx-auto mb-4 animate-spin" />
+                          <h3 className="text-lg font-semibold text-foreground mb-2">Đang tải khiếu nại...</h3>
+                          <p className="text-muted-foreground">Vui lòng đợi trong giây lát</p>
+                        </div>
+                      ) : complaints.length === 0 ? (
+                        <div className="text-center py-12">
+                          <Flag className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                          <h3 className="text-lg font-semibold text-foreground mb-2">Chưa có khiếu nại</h3>
+                          <p className="text-muted-foreground">Bạn chưa gửi khiếu nại nào</p>
+                        </div>
+                      ) : (
+                        complaints.map((complaint) => (
+                          <motion.div
+                            key={complaint.bao_cao_id}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 20 }}
+                            className={`p-4 border-b border-border hover:bg-muted/30 transition-colors ${
+                              complaint.trang_thai === 0 ? "bg-primary/5 border-l-4 border-l-primary" : "bg-muted/20"
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="flex-shrink-0 mt-1">
+                                <Flag className={`h-4 w-4 ${complaint.trang_thai === 0 ? "text-orange-600" : "text-green-600"}`} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <h4 className="text-sm font-semibold text-foreground">{complaint.ten_chuyen_di}</h4>
+                                      <Badge variant={complaint.trang_thai === 0 ? "default" : "secondary"} className="text-xs">
+                                        {complaint.trang_thai === 0 ? "Chờ xử lý" : "Đã xử lý"}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-sm text-muted-foreground mb-2">
+                                      <span className="font-medium">Lý do:</span> {complaint.ly_do}
+                                    </p>
+                                    {complaint.phan_hoi_cua_admin && (
+                                      <p className="text-sm text-foreground mb-2 p-2 bg-muted rounded-md">
+                                        <span className="font-medium">Phản hồi từ {complaint.ten_admin_phan_hoi || "Admin"}:</span> {complaint.phan_hoi_cua_admin}
+                                      </p>
+                                    )}
+                                    <div className="flex items-center gap-2 mt-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleViewComplaintDetail(complaint.bao_cao_id)
+                                        }}
+                                        className="h-8 text-xs"
+                                      >
+                                        <Eye className="h-3 w-3 mr-1" />
+                                        Xem chi tiết
+                                      </Button>
+                                      <span className="text-xs text-muted-foreground ml-auto">
+                                        {formatTime(complaint.tao_luc)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Dialog Chi tiết Khiếu Nại */}
+      <Dialog open={showComplaintDetailDialog} onOpenChange={setShowComplaintDetailDialog}>
+        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Flag className="h-5 w-5 text-orange-500" />
+              Chi tiết khiếu nại
+            </DialogTitle>
+          </DialogHeader>
+
+          {complaintDetailLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 text-primary animate-spin" />
+            </div>
+          ) : complaintDetail ? (
+            <div className="space-y-4 py-4">
+              {/* Thông tin chuyến đi */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Thông tin chuyến đi</Label>
+                <div className="p-3 bg-muted rounded-lg space-y-2">
+                  <div>
+                    <span className="text-sm font-medium">Tên chuyến đi:</span>
+                    <p className="text-sm text-foreground">{complaintDetail.ten_chuyen_di || complaintDetail.chuyen_di?.ten_chuyen_di || "N/A"}</p>
+                  </div>
+                  {complaintDetail.chuyen_di?.mo_ta && (
+                    <div>
+                      <span className="text-sm font-medium">Mô tả:</span>
+                      <p className="text-sm text-foreground">{complaintDetail.chuyen_di.mo_ta}</p>
+                    </div>
+                  )}
+                  <div className="flex gap-4">
+                    <div>
+                      <span className="text-sm font-medium">Ngày bắt đầu:</span>
+                      <p className="text-sm text-foreground">
+                        {complaintDetail.ngay_bat_dau || complaintDetail.chuyen_di?.ngay_bat_dau 
+                          ? new Date(complaintDetail.ngay_bat_dau || complaintDetail.chuyen_di.ngay_bat_dau).toLocaleDateString("vi-VN")
+                          : "N/A"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium">Ngày kết thúc:</span>
+                      <p className="text-sm text-foreground">
+                        {complaintDetail.ngay_ket_thuc || complaintDetail.chuyen_di?.ngay_ket_thuc
+                          ? new Date(complaintDetail.ngay_ket_thuc || complaintDetail.chuyen_di.ngay_ket_thuc).toLocaleDateString("vi-VN")
+                          : "N/A"}
+                      </p>
+                    </div>
+                  </div>
+                  {complaintDetail.chuyen_di?.trang_thai && (
+                    <div>
+                      <span className="text-sm font-medium">Trạng thái:</span>
+                      <Badge variant="outline" className="ml-2">{complaintDetail.chuyen_di.trang_thai}</Badge>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Lý do khiếu nại */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Lý do khiếu nại</Label>
+                <div className="p-3 bg-muted rounded-lg">
+                  <p className="text-sm text-foreground">{complaintDetail.ly_do || "N/A"}</p>
+                </div>
+              </div>
+
+              {/* Trạng thái */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Trạng thái xử lý</Label>
+                <div className="flex items-center gap-2">
+                  <Badge variant={complaintDetail.trang_thai === 0 ? "default" : "secondary"} className="text-xs">
+                    {complaintDetail.trang_thai_text || (complaintDetail.trang_thai === 0 ? "Chờ xử lý" : "Đã xử lý")}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Phản hồi từ admin */}
+              {complaintDetail.phan_hoi_cua_admin && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">
+                    Phản hồi từ {complaintDetail.admin_phan_hoi?.ho_ten || "Admin"}
+                  </Label>
+                  <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                    <p className="text-sm text-foreground">{complaintDetail.phan_hoi_cua_admin}</p>
+                    {complaintDetail.admin_phan_hoi?.email && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Email: {complaintDetail.admin_phan_hoi.email}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Thông tin thời gian */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Thông tin thời gian</Label>
+                <div className="p-3 bg-muted rounded-lg space-y-1">
+                  <div>
+                    <span className="text-xs text-muted-foreground">Tạo lúc:</span>
+                    <p className="text-sm text-foreground">
+                      {complaintDetail.tao_luc 
+                        ? new Date(complaintDetail.tao_luc).toLocaleString("vi-VN")
+                        : "N/A"}
+                    </p>
+                  </div>
+                  {complaintDetail.cap_nhat_luc && (
+                    <div>
+                      <span className="text-xs text-muted-foreground">Cập nhật lúc:</span>
+                      <p className="text-sm text-foreground">
+                        {new Date(complaintDetail.cap_nhat_luc).toLocaleString("vi-VN")}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Nút xem chuyến đi */}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    handleCloseComplaintDetailDialog()
+                    handleViewTripDetail(String(complaintDetail.chuyen_di_id))
+                  }}
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  Xem chuyến đi
+                </Button>
+                <Button variant="outline" onClick={handleCloseComplaintDetailDialog}>
+                  Đóng
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">Không tìm thấy chi tiết khiếu nại</p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Gửi Khiếu Nại */}
+      <Dialog open={showComplaintDialog} onOpenChange={setShowComplaintDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 justify-center w-full">
+              <Flag className="h-5 w-5 text-red-500" />
+              Gửi khiếu nại
+            </DialogTitle>
+            <DialogDescription>
+              Vui lòng cung cấp thông tin về vấn đề bạn gặp phải với chuyến đi này.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Lý do */}
+            <div className="space-y-2">
+              <Label htmlFor="ly_do">Lý do khiếu nại *</Label>
+              <Textarea
+                id="ly_do"
+                placeholder="Vui lòng mô tả chi tiết lý do khiếu nại..."
+                value={complaintLyDo}
+                onChange={(e) => setComplaintLyDo(e.target.value)}
+                className="min-h-[100px]"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={handleCloseComplaintDialog} disabled={isSubmittingComplaint}>
+              Hủy
+            </Button>
+            <Button onClick={handleSubmitComplaint} disabled={isSubmittingComplaint || !complaintLyDo.trim()}>
+              {isSubmittingComplaint ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Đang gửi...
+                </>
+              ) : (
+                <>
+                  <Flag className="h-4 w-4 mr-2" />
+                  Gửi khiếu nại
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -85,7 +85,7 @@ export function EditTripModal({ trip, onClose, onSubmit }: EditTripModalProps) {
         cong_khai: Number(formData.cong_khai ?? (typeof trip?.congKhai === 'number' ? trip.congKhai : (typeof trip?._api?.cong_khai === 'number' ? trip._api.cong_khai : 0))),
       }
 
-      const res = await axios.put(`https://travel-planner-imdw.onrender.com/api/chuyendi/${tripId}`,
+      const res = await axios.put(`https://travel-planner-imdw.onrender.com/api/chuyen-di/${tripId}`,
         payload,
         { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
       )
