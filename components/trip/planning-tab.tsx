@@ -18,6 +18,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -27,7 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Plus, MapPin, Calendar, DollarSign, Clock, ChevronRight, ChevronLeft, FileDown, Loader2, MoreVertical, Pencil, Trash2, AlertTriangle, GitCompare, Save } from "lucide-react"
+import { Plus, MapPin, Calendar, DollarSign, Clock, ChevronRight, ChevronLeft, FileDown, Loader2, MoreVertical, Pencil, Trash2, AlertTriangle, GitCompare, Save, Bell, BellOff } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import jsPDF from "jspdf"
@@ -201,6 +206,14 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
   // State cho lưu kế hoạch gốc
   const [isSavingOriginalPlan, setIsSavingOriginalPlan] = useState(false)
 
+  // State cho cảnh báo
+  const [isTogglingWarning, setIsTogglingWarning] = useState(false)
+  const [warningStatus, setWarningStatus] = useState<{
+    loai_hoat_dong: string
+    het_han: string | null
+  } | null>(null)
+  const [showWarningMenu, setShowWarningMenu] = useState(false)
+
   // Hàm chuyển đổi tên trường sang tiếng Việt
   const getFieldLabel = (key: string): string => {
     const fieldLabels: { [key: string]: string } = {
@@ -240,6 +253,219 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
     }
     
     return String(value)
+  }
+
+  // Function tắt cảnh báo
+  const handleDisableWarning = async (loaiHoatDong: string) => {
+    setIsTogglingWarning(true)
+    try {
+      const token = Cookies.get("token")
+      
+      if (!token || token === "null" || token === "undefined") {
+        toast({
+          title: "Lỗi xác thực",
+          description: "Vui lòng đăng nhập để sử dụng tính năng này",
+          variant: "destructive",
+        })
+        setIsTogglingWarning(false)
+        return
+      }
+
+      const response = await axios.post(
+        `${BACKEND_URL}/api/ke-hoach-chuyen-di/${tripId}/tat-canh-bao`,
+        {
+          loai_hoat_dong: loaiHoatDong,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      console.log("✅ API Response (Tắt cảnh báo):", response.data)
+      
+      setWarningStatus({
+        loai_hoat_dong: response.data.loai_hoat_dong,
+        het_han: response.data.het_han,
+      })
+      
+      const loaiTen: { [key: string]: string } = {
+        'diem_den': 'điểm đến',
+        'lich_trinh': 'lịch trình',
+        'dia_diem': 'địa điểm',
+        'chi_phi': 'chi phí',
+        'all': 'tất cả',
+      }
+      
+      toast({
+        title: "Đã tắt cảnh báo",
+        description: response.data.message || `Đã tắt cảnh báo ${loaiTen[loaiHoatDong] || loaiHoatDong} cho đến ${response.data.het_han}`,
+      })
+      
+      setShowWarningMenu(false)
+      
+      // Refresh trạng thái cảnh báo sau khi tắt
+      fetchWarningStatus()
+    } catch (error: any) {
+      console.error("❌ Lỗi khi tắt cảnh báo:", error)
+      
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          toast({
+            title: "Lỗi xác thực",
+            description: "Phiên đăng nhập đã hết hạn",
+            variant: "destructive",
+          })
+        } else if (error.response?.status === 400) {
+          toast({
+            title: "Lỗi",
+            description: error.response?.data?.message || "Loại hoạt động không hợp lệ",
+            variant: "destructive",
+          })
+        } else if (error.response?.status === 404) {
+          toast({
+            title: "Không tìm thấy",
+            description: "Không tìm thấy chuyến đi",
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "Lỗi",
+            description: error.response?.data?.message || "Không thể tắt cảnh báo",
+            variant: "destructive",
+          })
+        }
+      } else {
+        toast({
+          title: "Lỗi",
+          description: "Có lỗi xảy ra khi tắt cảnh báo",
+          variant: "destructive",
+        })
+      }
+    } finally {
+      setIsTogglingWarning(false)
+    }
+  }
+
+  // Function lấy trạng thái cảnh báo
+  const fetchWarningStatus = async () => {
+    try {
+      const token = Cookies.get("token")
+      
+      if (!token || token === "null" || token === "undefined") {
+        return
+      }
+
+      const response = await axios.get(
+        `${BACKEND_URL}/api/ke-hoach-chuyen-di/${tripId}/trang-thai-canh-bao`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      )
+
+      console.log("✅ API Response (Trạng thái cảnh báo):", response.data)
+      
+      // Xử lý response từ API
+      const canhBaoDaTat = response.data?.canh_bao_da_tat || []
+      
+      // Lấy cảnh báo đầu tiên còn hiệu lực (con_hieu_luc = true)
+      const canhBaoConHieuLuc = canhBaoDaTat.find((cb: any) => cb.con_hieu_luc === true)
+      
+      if (canhBaoConHieuLuc) {
+        setWarningStatus({
+          loai_hoat_dong: canhBaoConHieuLuc.loai_hoat_dong,
+          het_han: canhBaoConHieuLuc.het_han || null,
+        })
+      } else {
+        // Nếu không có cảnh báo nào còn hiệu lực, set về null
+        setWarningStatus(null)
+      }
+    } catch (error: any) {
+      console.error("❌ Lỗi khi lấy trạng thái cảnh báo:", error)
+      
+      // Nếu API trả về 404 hoặc không có dữ liệu, nghĩa là chưa có cảnh báo nào bị tắt
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 404) {
+          setWarningStatus(null)
+        } else if (error.response?.status === 401) {
+          console.warn("Token không hợp lệ khi lấy trạng thái cảnh báo")
+        }
+      } else {
+        setWarningStatus(null)
+      }
+    }
+  }
+
+  // Function bật lại cảnh báo
+  const handleEnableWarning = async () => {
+    if (!warningStatus) return
+    
+    setIsTogglingWarning(true)
+    try {
+      const token = Cookies.get("token")
+      
+      if (!token || token === "null" || token === "undefined") {
+        toast({
+          title: "Lỗi xác thực",
+          description: "Vui lòng đăng nhập để sử dụng tính năng này",
+          variant: "destructive",
+        })
+        setIsTogglingWarning(false)
+        return
+      }
+
+      const response = await axios.delete(
+        `${BACKEND_URL}/api/ke-hoach-chuyen-di/${tripId}/tat-canh-bao?loai_hoat_dong=${warningStatus.loai_hoat_dong}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+
+      console.log("✅ API Response (Bật lại cảnh báo):", response.data)
+      
+      setWarningStatus(null)
+      
+      toast({
+        title: "Đã bật lại cảnh báo",
+        description: response.data?.message || "Cảnh báo đã được bật lại",
+      })
+      
+      // Refresh trạng thái cảnh báo sau khi bật lại
+      fetchWarningStatus()
+    } catch (error: any) {
+      console.error("❌ Lỗi khi bật lại cảnh báo:", error)
+      
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          toast({
+            title: "Lỗi xác thực",
+            description: "Phiên đăng nhập đã hết hạn",
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "Lỗi",
+            description: error.response?.data?.message || "Không thể bật lại cảnh báo",
+            variant: "destructive",
+          })
+        }
+      } else {
+        toast({
+          title: "Lỗi",
+          description: "Có lỗi xảy ra khi bật lại cảnh báo",
+          variant: "destructive",
+        })
+      }
+    } finally {
+      setIsTogglingWarning(false)
+    }
   }
 
   // Function lưu kế hoạch gốc
@@ -598,6 +824,14 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
     }
 
     fetchTripInfo()
+  }, [tripId])
+
+  // Fetch trạng thái cảnh báo khi component mount
+  useEffect(() => {
+    if (tripId) {
+      fetchWarningStatus()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripId])
 
   // Fetch kế hoạch chuyến đi từ database
@@ -2458,7 +2692,7 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
           <Button 
             onClick={handleComparePlan}
             disabled={isLoadingCompare}
-            variant="outline"
+            variant="outline" 
             className="border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10 hover:from-primary/10 hover:to-primary/15 text-primary hover:text-primary/90 hover:border-primary/30 transition-all duration-200 shadow-sm hover:shadow-md"
           >
             {isLoadingCompare ? (
@@ -2473,28 +2707,117 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
               </>
             )}
           </Button>
-          <Button 
+            <Button 
           onClick={handleSaveOriginalPlan}
           disabled={isSavingOriginalPlan}
-          variant="outline"
+              variant="outline" 
           className="border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10 hover:from-primary/10 hover:to-primary/15 text-primary hover:text-primary/90 hover:border-primary/30 transition-all duration-200 shadow-sm hover:shadow-md"
-        >
+            >
           {isSavingOriginalPlan ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Đang lưu...
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4 mr-2" />
-              Lưu kế hoạch gốc
-            </>
-          )}
-        </Button>
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Đang lưu...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Lưu kế hoạch gốc
+                </>
+              )}
+            </Button>
         <Button onClick={() => setShowAddPlanModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Thêm kế hoạch
         </Button>
+        
+        {/* Nút bật/tắt cảnh báo */}
+        {warningStatus ? (
+          <Button
+            onClick={handleEnableWarning}
+            disabled={isTogglingWarning}
+            variant="outline"
+            className="border-orange-200 bg-gradient-to-r from-orange-50 to-orange-100 hover:from-orange-100 hover:to-orange-150 text-orange-700 hover:text-orange-800 hover:border-orange-300 transition-all duration-200 shadow-sm hover:shadow-md"
+          >
+            {isTogglingWarning ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Đang bật...
+              </>
+            ) : (
+              <>
+                <Bell className="h-4 w-4 mr-2" />
+                {/* Bật cảnh báo */}
+              </>
+            )}
+          </Button>
+        ) : (
+          <Popover open={showWarningMenu} onOpenChange={setShowWarningMenu}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                disabled={isTogglingWarning}
+                className="border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10 hover:from-primary/10 hover:to-primary/15 text-primary hover:text-primary/90 hover:border-primary/30 transition-all duration-200 shadow-sm hover:shadow-md"
+              >
+                {isTogglingWarning ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Đang tắt...
+                  </>
+                ) : (
+                  <>
+                    <BellOff className="h-4 w-4 mr-2" />
+                    {/* Tắt cảnh báo */}
+                  </>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-0" align="end">
+              <div className="p-2">
+                <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">
+                  Chọn loại cảnh báo cần tắt
+        </div>
+                <Separator />
+                <div className="py-1">
+                  <button
+                    onClick={() => handleDisableWarning('all')}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground rounded-sm transition-colors"
+                  >
+                    <div className="font-medium">Tất cả cảnh báo</div>
+                    <div className="text-xs text-muted-foreground">Tắt tất cả cảnh báo cho chuyến đi</div>
+                  </button>
+                  <button
+                    onClick={() => handleDisableWarning('diem_den')}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground rounded-sm transition-colors"
+                  >
+                    <div className="font-medium">Điểm đến</div>
+                    <div className="text-xs text-muted-foreground">Tắt cảnh báo về điểm đến</div>
+                  </button>
+                  <button
+                    onClick={() => handleDisableWarning('lich_trinh')}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground rounded-sm transition-colors"
+                  >
+                    <div className="font-medium">Lịch trình</div>
+                    <div className="text-xs text-muted-foreground">Tắt cảnh báo về lịch trình</div>
+                  </button>
+                  <button
+                    onClick={() => handleDisableWarning('dia_diem')}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground rounded-sm transition-colors"
+                  >
+                    <div className="font-medium">Địa điểm</div>
+                    <div className="text-xs text-muted-foreground">Tắt cảnh báo về địa điểm</div>
+                  </button>
+                  <button
+                    onClick={() => handleDisableWarning('chi_phi')}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground rounded-sm transition-colors"
+                  >
+                    <div className="font-medium">Chi phí</div>
+                    <div className="text-xs text-muted-foreground">Tắt cảnh báo về chi phí</div>
+                  </button>
+      </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
         </div>
       </div>
 
@@ -4289,9 +4612,9 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                                     {dd.gia_tri_cu && Object.entries(dd.gia_tri_cu).map(([key, value]: [string, any]) => (
                                       <div key={key} className="text-red-600 dark:text-red-400">
                                         <span className="font-medium">{getFieldLabel(key)}:</span> {formatFieldValue(key, value)}
-                                      </div>
-                                    ))}
-                                  </div>
+                              </div>
+                            ))}
+                          </div>
                                   </div>
                                   <div>
                                   <div className="text-xs font-semibold text-muted-foreground mb-1">Giá trị mới:</div>
@@ -4299,9 +4622,9 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                                     {dd.gia_tri_moi && Object.entries(dd.gia_tri_moi).map(([key, value]: [string, any]) => (
                                       <div key={key} className="text-green-600 dark:text-green-400">
                                         <span className="font-medium">{getFieldLabel(key)}:</span> {formatFieldValue(key, value)}
-                                      </div>
-                                    ))}
                                   </div>
+                                    ))}
+                                </div>
                               </div>
                           </div>
                             </div>
