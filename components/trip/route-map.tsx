@@ -30,11 +30,98 @@ export function RouteMap({ origin, destination, mapboxToken, travelMode = "drivi
 
   const token = mapboxToken || MAPBOX_TOKEN
 
+  // Mapping tọa độ chính xác cho các tỉnh thành Việt Nam (tọa độ trung tâm tỉnh/thành phố)
+  // Format: [longitude, latitude] theo chuẩn Mapbox
+  const VIETNAM_PROVINCES_COORDS: Record<string, [number, number]> = {
+    "An Giang": [105.1259, 10.5215], // Long Xuyên
+    "Bà Rịa - Vũng Tàu": [107.2420, 10.3460], // Vũng Tàu
+    "Bạc Liêu": [105.7214, 9.2945],
+    "Bắc Giang": [106.1970, 21.2731],
+    "Bắc Kạn": [105.8342, 22.1470],
+    "Bắc Ninh": [106.0581, 21.1861],
+    "Bến Tre": [106.3753, 10.2415],
+    "Bình Định": [109.2197, 13.7750],
+    "Bình Dương": [106.6297, 11.3254],
+    "Bình Phước": [106.6000, 11.7500],
+    "Bình Thuận": [108.1000, 11.0500],
+    "Cà Mau": [105.1527, 9.1770],
+    "Cao Bằng": [106.2522, 22.6657],
+    "Cần Thơ": [105.7871, 10.0452],
+    "Đà Nẵng": [108.2272, 16.0544],
+    "Đắk Lắk": [108.0500, 12.6667],
+    "Đắk Nông": [107.6833, 12.0000],
+    "Điện Biên": [103.0167, 21.3833],
+    "Đồng Nai": [106.9980, 10.9574],
+    "Đồng Tháp": [105.6300, 10.4600],
+    "Gia Lai": [108.0000, 13.9833],
+    "Hà Giang": [104.9833, 22.8333],
+    "Hà Nam": [105.9226, 20.5455],
+    "Hà Nội": [105.8342, 21.0285],
+    "Hải Dương": [106.3146, 20.9373],
+    "Hải Phòng": [106.6822, 20.8449],
+    "Hậu Giang": [105.6417, 9.7844],
+    "Hòa Bình": [105.3389, 20.8133],
+    "Thành phố Hồ Chí Minh": [106.6297, 10.8231],
+    "Hưng Yên": [106.0519, 20.6464],
+    "Khánh Hòa": [109.1920, 12.2388],
+    "Kiên Giang": [105.0919, 9.9580],
+    "Kon Tum": [108.0000, 14.3500],
+    "Lai Châu": [103.3433, 22.3969],
+    "Lạng Sơn": [106.7613, 21.8537],
+    "Lào Cai": [103.9750, 22.4833],
+    "Lâm Đồng": [108.4419, 11.9404],
+    "Long An": [106.4139, 10.6086],
+    "Nam Định": [106.1783, 20.4200],
+    "Nghệ An": [105.6316, 18.6796],
+    "Ninh Bình": [105.9794, 20.2539],
+    "Ninh Thuận": [108.9917, 11.5646],
+    "Phú Thọ": [105.2045, 21.3083],
+    "Phú Yên": [109.3167, 13.0833],
+    "Quảng Bình": [106.6226, 17.4684],
+    "Quảng Nam": [108.0190, 15.8801],
+    "Quảng Ngãi": [108.8000, 15.1167],
+    "Quảng Ninh": [107.1833, 21.0167],
+    "Quảng Trị": [107.2000, 16.7500],
+    "Sóc Trăng": [105.9739, 9.6025],
+    "Sơn La": [103.9167, 21.3167],
+    "Tây Ninh": [106.1000, 11.3000],
+    "Thái Bình": [106.3333, 20.4500],
+    "Thái Nguyên": [105.8442, 21.5928],
+    "Thanh Hóa": [105.7842, 19.8067],
+    "Thừa Thiên Huế": [107.5900, 16.4674],
+    "Tiền Giang": [106.3450, 10.3600],
+    "Trà Vinh": [106.3450, 9.9347],
+    "Tuyên Quang": [105.2181, 21.8233],
+    "Vĩnh Long": [105.9700, 10.2531],
+    "Vĩnh Phúc": [105.5928, 21.3083],
+    "Yên Bái": [104.9000, 21.7000],
+  }
+
+  // Hàm chuẩn hóa tên tỉnh thành để so sánh
+  const normalizeProvinceName = (name: string): string => {
+    return name.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  }
+
   // Geocoding: Chuyển đổi địa điểm thành tọa độ bằng Mapbox Geocoding API
   const geocodeAddress = async (address: string): Promise<[number, number] | null> => {
     try {
+      const trimmedAddress = address.trim()
+      
+      // Kiểm tra xem có phải là tỉnh thành trong mapping không
+      const normalizedInput = normalizeProvinceName(trimmedAddress)
+      const matchedProvince = Object.keys(VIETNAM_PROVINCES_COORDS).find(
+        province => normalizeProvinceName(province) === normalizedInput
+      )
+      
+      if (matchedProvince) {
+        const coords = VIETNAM_PROVINCES_COORDS[matchedProvince]
+        console.log(`✅ Using mapped coordinates for "${trimmedAddress}" (${matchedProvince}):`, coords)
+        return coords
+      }
+      
+      // Nếu không có trong mapping, sử dụng Mapbox API
       // Chuẩn hóa địa chỉ: thêm "Vietnam" hoặc "Việt Nam" nếu chưa có
-      let normalizedAddress = address.trim()
+      let normalizedAddress = trimmedAddress
       
       // Kiểm tra xem đã có "Vietnam" hoặc "Việt Nam" chưa
       const hasCountry = normalizedAddress.toLowerCase().includes('vietnam') || 
@@ -46,7 +133,7 @@ export function RouteMap({ origin, destination, mapboxToken, travelMode = "drivi
         normalizedAddress = `${normalizedAddress}, Vietnam`
       }
 
-      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(normalizedAddress)}.json?access_token=${token}&language=vi&country=vn&limit=5&types=place,locality,neighborhood,address`
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(normalizedAddress)}.json?access_token=${token}&language=vi&country=vn&limit=5&types=place,locality,neighborhood,address,region`
       
       console.log(`🔍 Geocoding: "${address}" -> "${normalizedAddress}"`)
       
@@ -61,7 +148,8 @@ export function RouteMap({ origin, destination, mapboxToken, travelMode = "drivi
       console.log(`📍 Geocoding results for "${address}":`, data.features?.map((f: any) => ({
         place_name: f.place_name,
         center: f.center,
-        relevance: f.relevance
+        relevance: f.relevance,
+        types: f.place_type
       })))
       
       if (data.features && data.features.length > 0) {
@@ -76,6 +164,12 @@ export function RouteMap({ origin, destination, mapboxToken, travelMode = "drivi
           if (aIsVN && !bIsVN) return -1
           if (!aIsVN && bIsVN) return 1
           
+          // Ưu tiên region (tỉnh/thành phố) hơn các loại khác
+          const aIsRegion = a.place_type?.includes('region')
+          const bIsRegion = b.place_type?.includes('region')
+          if (aIsRegion && !bIsRegion) return -1
+          if (!aIsRegion && bIsRegion) return 1
+          
           // Nếu cùng ở VN hoặc không ở VN, sắp xếp theo relevance
           return (b.relevance || 0) - (a.relevance || 0)
         })
@@ -84,7 +178,23 @@ export function RouteMap({ origin, destination, mapboxToken, travelMode = "drivi
         
         // Kiểm tra lại xem kết quả có hợp lý không
         const placeName = bestMatch.place_name?.toLowerCase() || ''
-        const searchTerm = address.toLowerCase()
+        const searchTerm = trimmedAddress.toLowerCase()
+        const searchTermNormalized = normalizeProvinceName(searchTerm)
+        
+        // Kiểm tra xem có khớp với tỉnh thành trong mapping không
+        const matchedInResults = Object.keys(VIETNAM_PROVINCES_COORDS).find(
+          province => {
+            const normalizedProvince = normalizeProvinceName(province)
+            return placeName.includes(normalizedProvince) || normalizedProvince.includes(searchTermNormalized)
+          }
+        )
+        
+        // Nếu tìm thấy tỉnh thành khớp trong kết quả, sử dụng tọa độ từ mapping
+        if (matchedInResults) {
+          const coords = VIETNAM_PROVINCES_COORDS[matchedInResults]
+          console.log(`✅ Using mapped coordinates for matched province "${matchedInResults}":`, coords)
+          return coords
+        }
         
         // Nếu tên địa điểm không chứa từ khóa tìm kiếm và relevance thấp, cảnh báo
         if (bestMatch.relevance < 0.5 && !placeName.includes(searchTerm.split(',')[0].trim())) {

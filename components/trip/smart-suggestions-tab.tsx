@@ -646,108 +646,109 @@ export function SmartSuggestionsTab({ tripId }: SmartSuggestionsTabProps) {
         </Card>
       </div>
 
-      {/* Gợi ý chuyến bay khứ hồi */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Plane className="h-5 w-5 text-primary" />
-            Gợi ý vé máy bay khứ hồi
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loadingRoundTrip && (
-            <p className="text-sm text-muted-foreground">Đang tải gợi ý chuyến bay...</p>
-          )}
-          {roundTripError && (
-            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-              <p className="text-sm text-destructive">{roundTripError}</p>
-            </div>
-          )}
-          {!loadingRoundTrip && !roundTripError && roundTripFlights && (
-            <div className="space-y-6">
-              {/* Chiều đi */}
-              {roundTripFlights.chieu_di && (
-                <div>
-                  <h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
-                    <Navigation2 className="h-4 w-4" />
-                    Chiều đi: {roundTripFlights.from} → {roundTripFlights.to}
-                    <span className="text-xs text-muted-foreground ml-2">
-                      ({new Date(roundTripFlights.ngay_di).toLocaleDateString("vi-VN")})
-                    </span>
-                  </h4>
-                  <div className="max-h-64 overflow-y-auto space-y-3 pr-2">
-                    {roundTripFlights.chieu_di.danh_sach && roundTripFlights.chieu_di.danh_sach.length > 0 ? (
-                      roundTripFlights.chieu_di.danh_sach.slice(0, 5).map((flight: any, idx: number) => (
-                        <div key={idx} className="border rounded-lg p-3 hover:shadow-md transition-shadow">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-2">
-                                <Badge variant="secondary">{flight.airline || "Không xác định"}</Badge>
-                                <span className="text-sm font-medium">{flight.from} → {flight.to}</span>
+      {/* Gợi ý chuyến bay khứ hồi - TẠM THỜI TẮT */}
+      {false && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Plane className="h-5 w-5 text-primary" />
+              Gợi ý vé máy bay khứ hồi
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingRoundTrip && (
+              <p className="text-sm text-muted-foreground">Đang tải gợi ý chuyến bay...</p>
+            )}
+            {roundTripError && (
+              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                <p className="text-sm text-destructive">{roundTripError}</p>
+              </div>
+            )}
+            {!loadingRoundTrip && !roundTripError && roundTripFlights && (
+              <div className="space-y-6">
+                {roundTripFlights.chieu_di && (
+                  <div>
+                    <h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                      <Navigation2 className="h-4 w-4" />
+                      Chiều đi: {roundTripFlights.from} → {roundTripFlights.to}
+                      <span className="text-xs text-muted-foreground ml-2">
+                        ({new Date(roundTripFlights.ngay_di).toLocaleDateString("vi-VN")})
+                      </span>
+                    </h4>
+                    <div className="max-h-64 overflow-y-auto space-y-3 pr-2">
+                      {roundTripFlights.chieu_di.danh_sach && roundTripFlights.chieu_di.danh_sach.length > 0 ? (
+                        roundTripFlights.chieu_di.danh_sach.slice(0, 5).map((flight: any, idx: number) => (
+                          <div key={idx} className="border rounded-lg p-3 hover:shadow-md transition-shadow">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <Badge variant="secondary">{flight.airline || "Không xác định"}</Badge>
+                                  <span className="text-sm font-medium">{flight.from} → {flight.to}</span>
+                                </div>
+                                <div className="text-xs text-muted-foreground space-y-1">
+                                  <div>Khởi hành: {flight.depart_time || "N/A"}</div>
+                                  {flight.return_time && <div>Đến: {flight.return_time}</div>}
+                                </div>
                               </div>
-                              <div className="text-xs text-muted-foreground space-y-1">
-                                <div>Khởi hành: {flight.depart_time || "N/A"}</div>
-                                {flight.return_time && <div>Đến: {flight.return_time}</div>}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-lg font-bold text-primary">
-                                {flight.price ? `${new Intl.NumberFormat("vi-VN").format(flight.price)} ${flight.currency || roundTripFlights.chieu_di.currency || "VNĐ"}` : "Liên hệ"}
+                              <div className="text-right">
+                                <div className="text-lg font-bold text-primary">
+                                  {flight.price ? `${new Intl.NumberFormat("vi-VN").format(flight.price)} ${flight.currency || roundTripFlights.chieu_di.currency || "VNĐ"}` : "Liên hệ"}
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Không tìm thấy chuyến bay chiều đi</p>
-                    )}
+                        ))
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Không tìm thấy chuyến bay chiều đi</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Chiều về */}
-              {roundTripFlights.chieu_ve && (
-                <div>
-                  <h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
-                    <Navigation2 className="h-4 w-4 rotate-180" />
-                    Chiều về: {roundTripFlights.to} → {roundTripFlights.from}
-                    <span className="text-xs text-muted-foreground ml-2">
-                      ({new Date(roundTripFlights.ngay_ve).toLocaleDateString("vi-VN")})
-                    </span>
-                  </h4>
-                  <div className="max-h-64 overflow-y-auto space-y-3 pr-2">
-                    {roundTripFlights.chieu_ve.danh_sach && roundTripFlights.chieu_ve.danh_sach.length > 0 ? (
-                      roundTripFlights.chieu_ve.danh_sach.slice(0, 5).map((flight: any, idx: number) => (
-                        <div key={idx} className="border rounded-lg p-3 hover:shadow-md transition-shadow">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-2">
-                                <Badge variant="secondary">{flight.airline || "Không xác định"}</Badge>
-                                <span className="text-sm font-medium">{flight.from} → {flight.to}</span>
+                {/* Chiều về */}
+                {roundTripFlights.chieu_ve && (
+                  <div>
+                    <h4 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                      <Navigation2 className="h-4 w-4 rotate-180" />
+                      Chiều về: {roundTripFlights.to} → {roundTripFlights.from}
+                      <span className="text-xs text-muted-foreground ml-2">
+                        ({new Date(roundTripFlights.ngay_ve).toLocaleDateString("vi-VN")})
+                      </span>
+                    </h4>
+                    <div className="max-h-64 overflow-y-auto space-y-3 pr-2">
+                      {roundTripFlights.chieu_ve.danh_sach && roundTripFlights.chieu_ve.danh_sach.length > 0 ? (
+                        roundTripFlights.chieu_ve.danh_sach.slice(0, 5).map((flight: any, idx: number) => (
+                          <div key={idx} className="border rounded-lg p-3 hover:shadow-md transition-shadow">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <Badge variant="secondary">{flight.airline || "Không xác định"}</Badge>
+                                  <span className="text-sm font-medium">{flight.from} → {flight.to}</span>
+                                </div>
+                                <div className="text-xs text-muted-foreground space-y-1">
+                                  <div>Khởi hành: {flight.depart_time || "N/A"}</div>
+                                  {flight.return_time && <div>Đến: {flight.return_time}</div>}
+                                </div>
                               </div>
-                              <div className="text-xs text-muted-foreground space-y-1">
-                                <div>Khởi hành: {flight.depart_time || "N/A"}</div>
-                                {flight.return_time && <div>Đến: {flight.return_time}</div>}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-lg font-bold text-primary">
-                                {flight.price ? `${new Intl.NumberFormat("vi-VN").format(flight.price)} ${flight.currency || roundTripFlights.chieu_ve.currency || "VNĐ"}` : "Liên hệ"}
+                              <div className="text-right">
+                                <div className="text-lg font-bold text-primary">
+                                  {flight.price ? `${new Intl.NumberFormat("vi-VN").format(flight.price)} ${flight.currency || roundTripFlights.chieu_ve.currency || "VNĐ"}` : "Liên hệ"}
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Không tìm thấy chuyến bay chiều về</p>
-                    )}
+                        ))
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Không tìm thấy chuyến bay chiều về</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tìm kiếm chuyến bay một chiều */}
       <Card>
