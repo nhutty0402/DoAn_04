@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { MapPin, Navigation2, Loader2, Car, Footprints, Bike } from "lucide-react"
+import { MapPin, Navigation2, Loader2, Car, Footprints, Bike, Search, ChevronDown, ChevronUp, X } from "lucide-react"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
 // Icon xe máy đơn giản (SVG)
 const MotorcycleIcon = ({ className }: { className?: string }) => (
@@ -106,6 +107,90 @@ export function MapsTab({ tripId }: MapsTabProps) {
   const [selectedDestination, setSelectedDestination] = useState<string>("")
   const [travelMode, setTravelMode] = useState<"driving" | "driving-traffic" | "walking" | "cycling" | "motorcycle">("driving")
   const [loadingDiemDen, setLoadingDiemDen] = useState(false)
+  
+  // State cho tìm kiếm tỉnh thành
+  const [showOriginSearch, setShowOriginSearch] = useState(false)
+  const [showDestinationSearch, setShowDestinationSearch] = useState(false)
+  const [originSearchQuery, setOriginSearchQuery] = useState("")
+  const [destinationSearchQuery, setDestinationSearchQuery] = useState("")
+  const [openOriginPopover, setOpenOriginPopover] = useState(false)
+  const [openDestinationPopover, setOpenDestinationPopover] = useState(false)
+  
+  // Danh sách 63 tỉnh thành Việt Nam
+  const TINH_THANH_LIST = [
+    "An Giang",
+    "Bà Rịa - Vũng Tàu",
+    "Bạc Liêu",
+    "Bắc Giang",
+    "Bắc Kạn",
+    "Bắc Ninh",
+    "Bến Tre",
+    "Bình Định",
+    "Bình Dương",
+    "Bình Phước",
+    "Bình Thuận",
+    "Cà Mau",
+    "Cao Bằng",
+    "Cần Thơ",
+    "Đà Nẵng",
+    "Đắk Lắk",
+    "Đắk Nông",
+    "Điện Biên",
+    "Đồng Nai",
+    "Đồng Tháp",
+    "Gia Lai",
+    "Hà Giang",
+    "Hà Nam",
+    "Hà Nội",
+    "Hải Dương",
+    "Hải Phòng",
+    "Hậu Giang",
+    "Hòa Bình",
+    "Thành phố Hồ Chí Minh",
+    "Hưng Yên",
+    "Khánh Hòa",
+    "Kiên Giang",
+    "Kon Tum",
+    "Lai Châu",
+    "Lạng Sơn",
+    "Lào Cai",
+    "Lâm Đồng",
+    "Long An",
+    "Nam Định",
+    "Nghệ An",
+    "Ninh Bình",
+    "Ninh Thuận",
+    "Phú Thọ",
+    "Phú Yên",
+    "Quảng Bình",
+    "Quảng Nam",
+    "Quảng Ngãi",
+    "Quảng Ninh",
+    "Quảng Trị",
+    "Sóc Trăng",
+    "Sơn La",
+    "Tây Ninh",
+    "Thái Bình",
+    "Thái Nguyên",
+    "Thanh Hóa",
+    "Thừa Thiên Huế",
+    "Tiền Giang",
+    "Trà Vinh",
+    "Tuyên Quang",
+    "Vĩnh Long",
+    "Vĩnh Phúc",
+    "Yên Bái"
+  ]
+  
+  // Hàm lọc tỉnh thành theo query
+  const filterTinhThanh = (query: string) => {
+    if (!query.trim()) return TINH_THANH_LIST
+    const lowerQuery = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    return TINH_THANH_LIST.filter(tinh => {
+      const normalizedTinh = tinh.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      return normalizedTinh.includes(lowerQuery)
+    })
+  }
 
   // Fetch danh sách điểm đến từ API
   const fetchDiemDenList = async () => {
@@ -291,43 +376,224 @@ export function MapsTab({ tripId }: MapsTabProps) {
             {/* Chọn điểm xuất phát, điểm đến và phương tiện */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="origin-select">Điểm xuất phát</Label>
-                <Select
-                  value={selectedOrigin}
-                  onValueChange={setSelectedOrigin}
-                  disabled={loadingDiemDen}
-                >
-                  <SelectTrigger id="origin-select">
-                    <SelectValue placeholder="Chọn điểm xuất phát" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {getOriginOptions().map((origin, index) => (
-                      <SelectItem key={`origin-${index}`} value={origin}>
-                        {origin}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="origin-select">Điểm xuất phát</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowOriginSearch(!showOriginSearch)}
+                    className="h-7 px-3 text-xs border-2 hover:bg-primary/10 hover:border-primary transition-colors"
+                  >
+                    {showOriginSearch ? (
+                      <>
+                        <ChevronUp className="h-3 w-3 mr-1" />
+                        Ẩn tìm kiếm
+                      </>
+                    ) : (
+                      <>
+                        <Search className="h-3 w-3 mr-1" />
+                        Tìm kiếm
+                      </>
+                    )}
+                  </Button>
+                </div>
+                {showOriginSearch ? (
+                  <div className="space-y-2">
+                    <Popover open={openOriginPopover} onOpenChange={setOpenOriginPopover}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          className="w-full justify-between"
+                        >
+                          {selectedOrigin || "Tìm kiếm tỉnh thành..."}
+                          <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[300px] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                        <div className="p-2 border-b">
+                          <Input
+                            placeholder="Tìm kiếm tỉnh thành..."
+                            value={originSearchQuery}
+                            onChange={(e) => setOriginSearchQuery(e.target.value)}
+                            className="h-9"
+                            autoFocus
+                          />
+                        </div>
+                        <div className="max-h-[300px] overflow-y-auto">
+                          {filterTinhThanh(originSearchQuery).length > 0 ? (
+                            filterTinhThanh(originSearchQuery).map((tinh) => (
+                              <div
+                                key={tinh}
+                                className="px-3 py-2 cursor-pointer hover:bg-accent text-sm transition-colors"
+                                onClick={() => {
+                                  setSelectedOrigin(tinh)
+                                  setOriginSearchQuery("")
+                                  setOpenOriginPopover(false)
+                                }}
+                              >
+                                {tinh}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="px-3 py-2 text-sm text-muted-foreground text-center">
+                              Không tìm thấy
+                            </div>
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    {selectedOrigin && (
+                      <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                        <MapPin className="h-4 w-4 text-primary" />
+                        <span className="text-sm flex-1 font-medium">{selectedOrigin}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedOrigin("")
+                            setOriginSearchQuery("")
+                          }}
+                          className="h-6 w-6 p-0"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <Select
+                    value={selectedOrigin}
+                    onValueChange={setSelectedOrigin}
+                    disabled={loadingDiemDen}
+                  >
+                    <SelectTrigger id="origin-select"
+                    className="border-2 border-gray-400 rounded-lg h-12 px-4 focus:border-blue-500"
+                    >
+                      <SelectValue placeholder="Chọn điểm xuất phát" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getOriginOptions().map((origin, index) => (
+                        <SelectItem key={`origin-${index}`} value={origin}>
+                          {origin}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="destination-select">Điểm đến</Label>
-                <Select
-                  value={selectedDestination}
-                  onValueChange={setSelectedDestination}
-                  disabled={loadingDiemDen}
-                >
-                  <SelectTrigger id="destination-select">
-                    <SelectValue placeholder="Chọn điểm đến" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {getDestinationOptions().map((destination, index) => (
-                      <SelectItem key={`dest-${index}`} value={destination}>
-                        {destination}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="destination-select">Điểm đến</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowDestinationSearch(!showDestinationSearch)}
+                    className="h-7 px-3 text-xs border-2 hover:bg-primary/10 hover:border-primary transition-colors"
+                  >
+                    {showDestinationSearch ? (
+                      <>
+                        <ChevronUp className="h-3 w-3 mr-1" />
+                        Ẩn tìm kiếm
+                      </>
+                    ) : (
+                      <>
+                        <Search className="h-3 w-3 mr-1" />
+                        Tìm kiếm
+                      </>
+                    )}
+                  </Button>
+                </div>
+                {showDestinationSearch ? (
+                  <div className="space-y-2">
+                    <Popover open={openDestinationPopover} onOpenChange={setOpenDestinationPopover}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          className="w-full justify-between"
+                        >
+                          {selectedDestination || "Tìm kiếm tỉnh thành..."}
+                          <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[300px] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                        <div className="p-2 border-b">
+                          <Input
+                            placeholder="Tìm kiếm tỉnh thành..."
+                            value={destinationSearchQuery}
+                            onChange={(e) => setDestinationSearchQuery(e.target.value)}
+                            className="h-9"
+                            autoFocus
+                          />
+                        </div>
+                        <div className="max-h-[300px] overflow-y-auto">
+                          {filterTinhThanh(destinationSearchQuery).length > 0 ? (
+                            filterTinhThanh(destinationSearchQuery).map((tinh) => (
+                              <div
+                                key={tinh}
+                                className="px-3 py-2 cursor-pointer hover:bg-accent text-sm transition-colors"
+                                onClick={() => {
+                                  setSelectedDestination(tinh)
+                                  setDestinationSearchQuery("")
+                                  setOpenDestinationPopover(false)
+                                }}
+                              >
+                                {tinh}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="px-3 py-2 text-sm text-muted-foreground text-center">
+                              Không tìm thấy
+                            </div>
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    {selectedDestination && (
+                      <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                        <MapPin className="h-4 w-4 text-primary" />
+                        <span className="text-sm flex-1 font-medium">{selectedDestination}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedDestination("")
+                            setDestinationSearchQuery("")
+                          }}
+                          className="h-6 w-6 p-0"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <Select
+                    value={selectedDestination}
+                    onValueChange={setSelectedDestination}
+                    disabled={loadingDiemDen}
+                  >
+                    <SelectTrigger id="destination-select"
+                    className="border-2 border-gray-400 rounded-lg h-12 px-4 focus:border-blue-500"
+                    >
+                      <SelectValue placeholder="Chọn điểm đến" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getDestinationOptions().map((destination, index) => (
+                        <SelectItem key={`dest-${index}`} value={destination}>
+                          {destination}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
+              
               <div className="space-y-2">
                 <Label htmlFor="travel-mode-select">Phương tiện</Label>
                 <Select

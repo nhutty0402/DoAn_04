@@ -33,19 +33,71 @@ export function RouteMap({ origin, destination, mapboxToken, travelMode = "drivi
   // Geocoding: Chuyển đổi địa điểm thành tọa độ bằng Mapbox Geocoding API
   const geocodeAddress = async (address: string): Promise<[number, number] | null> => {
     try {
-      const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${token}&language=vi&country=vn&limit=1`
-      )
+      // Chuẩn hóa địa chỉ: thêm "Vietnam" hoặc "Việt Nam" nếu chưa có
+      let normalizedAddress = address.trim()
+      
+      // Kiểm tra xem đã có "Vietnam" hoặc "Việt Nam" chưa
+      const hasCountry = normalizedAddress.toLowerCase().includes('vietnam') || 
+                         normalizedAddress.toLowerCase().includes('việt nam') ||
+                         normalizedAddress.toLowerCase().includes('viet nam')
+      
+      // Nếu chưa có, thêm "Vietnam" vào cuối để giới hạn kết quả trong Việt Nam
+      if (!hasCountry) {
+        normalizedAddress = `${normalizedAddress}, Vietnam`
+      }
+
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(normalizedAddress)}.json?access_token=${token}&language=vi&country=vn&limit=5&types=place,locality,neighborhood,address`
+      
+      console.log(`🔍 Geocoding: "${address}" -> "${normalizedAddress}"`)
+      
+      const response = await fetch(url)
 
       if (!response.ok) {
         throw new Error("Geocoding failed")
       }
 
       const data = await response.json()
+      
+      console.log(`📍 Geocoding results for "${address}":`, data.features?.map((f: any) => ({
+        place_name: f.place_name,
+        center: f.center,
+        relevance: f.relevance
+      })))
+      
       if (data.features && data.features.length > 0) {
+        // Ưu tiên kết quả có relevance cao nhất và có country code là VN
+        // Sắp xếp theo relevance (cao nhất trước)
+        const sortedFeatures = data.features.sort((a: any, b: any) => {
+          // Kiểm tra xem có phải địa điểm ở Việt Nam không
+          const aIsVN = a.context?.some((ctx: any) => ctx.id?.startsWith('country.') && ctx.short_code === 'vn')
+          const bIsVN = b.context?.some((ctx: any) => ctx.id?.startsWith('country.') && ctx.short_code === 'vn')
+          
+          // Ưu tiên địa điểm ở VN
+          if (aIsVN && !bIsVN) return -1
+          if (!aIsVN && bIsVN) return 1
+          
+          // Nếu cùng ở VN hoặc không ở VN, sắp xếp theo relevance
+          return (b.relevance || 0) - (a.relevance || 0)
+        })
+        
+        const bestMatch = sortedFeatures[0]
+        
+        // Kiểm tra lại xem kết quả có hợp lý không
+        const placeName = bestMatch.place_name?.toLowerCase() || ''
+        const searchTerm = address.toLowerCase()
+        
+        // Nếu tên địa điểm không chứa từ khóa tìm kiếm và relevance thấp, cảnh báo
+        if (bestMatch.relevance < 0.5 && !placeName.includes(searchTerm.split(',')[0].trim())) {
+          console.warn(`⚠️ Low relevance match for "${address}":`, bestMatch.place_name, `(relevance: ${bestMatch.relevance})`)
+        }
+        
+        console.log(`✅ Selected: "${bestMatch.place_name}" (relevance: ${bestMatch.relevance})`)
+        
         // Mapbox trả về [lng, lat]
-        return data.features[0].center as [number, number]
+        return bestMatch.center as [number, number]
       }
+      
+      console.warn(`❌ No geocoding results for "${address}"`)
       return null
     } catch (err) {
       console.error("Geocoding error:", err)

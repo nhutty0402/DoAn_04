@@ -32,7 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Plus, MapPin, Calendar, DollarSign, Clock, ChevronRight, ChevronLeft, FileDown, Loader2, MoreVertical, Pencil, Trash2, AlertTriangle, GitCompare, Save, Bell, BellOff } from "lucide-react"
+import { Plus, MapPin, Calendar, DollarSign, Clock, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, FileDown, Loader2, MoreVertical, Pencil, Trash2, AlertTriangle, GitCompare, Save, Bell, BellOff } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import jsPDF from "jspdf"
@@ -213,6 +213,12 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
     het_han: string | null
   } | null>(null)
   const [showWarningMenu, setShowWarningMenu] = useState(false)
+
+  // State cho ẩn/hiện danh sách lịch trình đã thêm
+  const [showLichTrinhList, setShowLichTrinhList] = useState(true)
+
+  // State cho ẩn/hiện danh sách chi phí đã thêm
+  const [showChiPhiList, setShowChiPhiList] = useState(true)
 
   // Hàm chuyển đổi tên trường sang tiếng Việt
   const getFieldLabel = (key: string): string => {
@@ -3086,19 +3092,36 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                           </span>
                         )}
                       </Badge>
-                      <DropdownMenu>
+                      <DropdownMenu modal={false}>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-8 w-8 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                            }}
+                          >
                             <MoreVertical className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleOpenEditDiemDen(diemDen)}>
+                        <DropdownMenuContent 
+                          align="end"
+                          onClick={(e) => e.stopPropagation()}
+                          onCloseAutoFocus={(e) => e.preventDefault()}
+                        >
+                          <DropdownMenuItem 
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleOpenEditDiemDen(diemDen)
+                            }}
+                          >
                             <Pencil className="mr-2 h-4 w-4" />
                             Chỉnh sửa điểm đến
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation()
                               setDeletingDiemDen(diemDen)
                               setShowDeleteDiemDenDialog(true)
                             }}
@@ -3166,18 +3189,39 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
                                         {lichTrinhTrongNgay.length} hoạt động
                                       </Badge>
 
-                                      <DropdownMenu>
+                                      <DropdownMenu modal={false}>
                                         <DropdownMenuTrigger asChild>
-                                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                          <Button 
+                                            variant="ghost" 
+                                            size="sm" 
+                                            className="h-8 w-8 p-0"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                            }}
+                                          >
                                             <MoreVertical className="h-4 w-4" />
                                           </Button>
                                         </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                          <DropdownMenuItem onClick={() => handleOpenEditLichTrinh(diemDen)}>
+                                        <DropdownMenuContent 
+                                          align="end"
+                                          onClick={(e) => e.stopPropagation()}
+                                          onCloseAutoFocus={(e) => e.preventDefault()}
+                                        >
+                                          <DropdownMenuItem 
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              handleOpenEditLichTrinh(diemDen)
+                                            }}
+                                          >
                                             <Pencil className="mr-2 h-4 w-4" />
                                             Chỉnh sửa lịch trình
                                           </DropdownMenuItem>
-                                          <DropdownMenuItem onClick={() => handleOpenEditChiPhi(diemDen)}>
+                                          <DropdownMenuItem 
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              handleOpenEditChiPhi(diemDen)
+                                            }}
+                                          >
                                             <Pencil className="mr-2 h-4 w-4" />
                                             Chỉnh sửa chi phí
                                           </DropdownMenuItem>
@@ -3651,76 +3695,139 @@ export function PlanningTab({ tripId }: PlanningTabProps) {
 
             {/* Tab Chi phí */}
             <TabsContent value="chi-phi" className="space-y-4 mt-4">
-              {/* Hiển thị danh sách chi phí đã thêm */}
+              {/* Hiển thị danh sách lịch trình đã thêm */}
+              {lichTrinhList.length > 0 && (
+                <div className="bg-muted/50 p-4 rounded-lg border">
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-sm font-semibold">Lịch trình đã thêm ({lichTrinhList.length})</Label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowLichTrinhList(!showLichTrinhList)}
+                      className="h-6 w-6 p-0"
+                    >
+                      {showLichTrinhList ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                  {showLichTrinhList && (
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {lichTrinhList.map((lt) => {
+                        const diemDen = diemDenList.find(dd => dd.diem_den_id === lt.diem_den_id)
+                        return (
+                          <div key={lt.lich_trinh_id} className="bg-background p-2 rounded border text-sm">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">{lt.tieu_de}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {lt.ngay}
+                              </Badge>
+                            </div>
+                            {diemDen && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                📍 {diemDen.ten_diem_den}
+                              </p>
+                            )}
+                            {lt.gio_bat_dau && lt.gio_ket_thuc && (
+                              <p className="text-xs text-muted-foreground">
+                                ⏰ {lt.gio_bat_dau} - {lt.gio_ket_thuc}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* Những chi phí đã thêm trong lịch trình */}
               {chiPhiList.length > 0 && (
                 <div className="bg-muted/50 p-4 rounded-lg border">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                     <Label className="text-sm font-semibold">Chi phí đã thêm ({chiPhiList.length})</Label>
-                      <Badge variant="secondary" className="text-xs font-medium">
+                      {/* <Badge variant="secondary" className="text-xs font-medium">
                         Tổng: {formatCurrency(chiPhiList.reduce((sum, cp) => sum + cp.so_tien, 0))} VNĐ
-                    </Badge>
+                    </Badge> */}
                     </div>
-                    <div className="flex items-center gap-2 bg-primary/10 px-3 py-1.5 rounded-lg border border-primary/20">
-                      <DollarSign className="h-4 w-4 text-primary" />
-                      <span className="text-sm font-bold text-primary">
-                        {formatCurrency(chiPhiList.reduce((sum, cp) => sum + cp.so_tien, 0))} VNĐ
-                      </span>
+                    <div className="flex items-center gap-2">
+                      {/* <div className="flex items-center gap-2 bg-primary/10 px-3 py-1.5 rounded-lg border border-primary/20">
+                        <DollarSign className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-bold text-primary">
+                          {formatCurrency(chiPhiList.reduce((sum, cp) => sum + cp.so_tien, 0))} VNĐ
+                        </span>
+                      </div> */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowChiPhiList(!showChiPhiList)}
+                        className="h-6 w-6 p-0"
+                      >
+                        {showChiPhiList ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </Button>
                     </div>
                   </div>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {chiPhiList.map((cp) => {
-                      const diemDen = diemDenList.find(dd => dd.diem_den_id === cp.diem_den_id)
-                      const lichTrinh = cp.lich_trinh_id ? lichTrinhList.find(lt => lt.lich_trinh_id === cp.lich_trinh_id) : null
-                      return (
-                        <div key={cp.chi_phi_id} className="bg-background p-3 rounded-lg border border-border hover:border-primary/30 transition-colors">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 min-w-0">
-                              <span className="font-medium text-sm">{cp.mo_ta}</span>
-                              <div className="flex items-center gap-2 mt-2 flex-wrap">
-                            {cp.nhom && (
-                              <Badge variant="secondary" className="text-xs">
-                                {cp.nhom}
-                              </Badge>
-                            )}
-                            {cp.ngay && (
-                                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                    <Calendar className="h-3 w-3" />
-                                    {new Date(cp.ngay).toLocaleDateString("vi-VN", {
-                                      day: "2-digit",
-                                      month: "2-digit",
-                                      year: "numeric"
-                                    })}
-                              </span>
-                            )}
-                          </div>
-                          {diemDen && (
-                                <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
-                                  <MapPin className="h-3 w-3" />
-                                  {diemDen.ten_diem_den}
-                            </p>
-                          )}
-                          {lichTrinh && (
-                                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  Lịch trình: {lichTrinh.tieu_de}
-                            </p>
-                          )}
-                            </div>
-                            <div className="flex-shrink-0">
-                              <div className="flex items-center gap-1 bg-green-50 border border-green-200 px-2.5 py-1.5 rounded-lg">
-                                <DollarSign className="h-3.5 w-3.5 text-green-700" />
-                                <span className="text-sm font-bold text-green-700">
-                                  {formatCurrency(cp.so_tien)}
+                  {showChiPhiList && (
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {chiPhiList.map((cp) => {
+                        const diemDen = diemDenList.find(dd => dd.diem_den_id === cp.diem_den_id)
+                        const lichTrinh = cp.lich_trinh_id ? lichTrinhList.find(lt => lt.lich_trinh_id === cp.lich_trinh_id) : null
+                        return (
+                          <div key={cp.chi_phi_id} className="bg-background p-3 rounded-lg border border-border hover:border-primary/30 transition-colors">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <span className="font-medium text-sm">{cp.mo_ta}</span>
+                                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                              {cp.nhom && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {cp.nhom}
+                                </Badge>
+                              )}
+                              {cp.ngay && (
+                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                      <Calendar className="h-3 w-3" />
+                                      {new Date(cp.ngay).toLocaleDateString("vi-VN", {
+                                        day: "2-digit",
+                                        month: "2-digit",
+                                        year: "numeric"
+                                      })}
                                 </span>
-                                <span className="text-xs text-green-600 ml-0.5">VNĐ</span>
+                              )}
+                            </div>
+                            {diemDen && (
+                                  <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" />
+                                    {diemDen.ten_diem_den}
+                              </p>
+                            )}
+                            {lichTrinh && (
+                                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    Lịch trình: {lichTrinh.tieu_de}
+                              </p>
+                            )}
+                              </div>
+                              <div className="flex-shrink-0">
+                                <div className="flex items-center gap-1 bg-green-50 border border-green-200 px-2.5 py-1.5 rounded-lg">
+                                  <DollarSign className="h-3.5 w-3.5 text-green-700" />
+                                  <span className="text-sm font-bold text-green-700">
+                                    {formatCurrency(cp.so_tien)}
+                                  </span>
+                                  <span className="text-xs text-green-600 ml-0.5">VNĐ</span>
+                                </div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                      )
-                    })}
-                  </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
               <div>
